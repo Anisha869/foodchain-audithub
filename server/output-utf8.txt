@@ -1,0 +1,45 @@
+﻿node : file:///C:/Users/An
+isha/Downloads/foodchain-a
+udithub-phase2/foodchain-a
+udithub/server/src/utils/f
+ileParser.js:2
+At line:1 char:1
++ node src/index.js > 
+output.log 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (f  
+  ile:///C:/User...file   
+ Parser.js:2:String) [    
+], RemoteException
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 
+import pdfParse from 
+"pdf-parse";
+       ^^^^^^^^
+SyntaxError: The 
+requested module 
+'pdf-parse' does not 
+provide an export named 
+'default'
+    at 
+ModuleJob._instantiate (no
+de:internal/modules/esm/mo
+dule_job:180:21)
+    at async 
+ModuleJob.run (node:intern
+al/modules/esm/module_job:
+263:5)
+    at async onImport.trac
+ePromise.__proto__ (node:i
+nternal/modules/esm/loader
+:578:26)
+    at async asyncRunEntry
+PointWithESMLoader (node:i
+nternal/modules/run_main:1
+16:5)
+
+Node.js v22.14.0
