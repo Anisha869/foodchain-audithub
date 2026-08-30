@@ -43,7 +43,107 @@ foodchain-audithub/
 
 ---
 
-## Getting Started
+## 🐳 Project Setup Using Docker
+
+Follow the steps below to run the project on your laptop or PC.
+
+### 1. Install Docker Desktop
+
+Download and install **Docker Desktop**:
+
+https://www.docker.com/products/docker-desktop/
+
+After installation, **open Docker Desktop** and make sure it is running.
+
+---
+
+### 2. Clone the Project
+
+Open **Command Prompt / PowerShell / Terminal** and run:
+
+```bash
+git clone <YOUR-GITHUB-REPOSITORY-URL>
+```
+
+Go inside the project folder:
+
+```bash
+cd foodchain-audithub
+```
+
+---
+
+### 3. Start the Project
+
+Run:
+
+```bash
+docker compose up --build
+```
+
+Docker will automatically:
+
+* Build the frontend
+* Build the backend
+* Install the required dependencies
+* Create the required containers
+* Start the application
+
+**No separate installation of Node.js, npm, or other project dependencies is required.**
+
+> Keep Docker Desktop running while using the application.
+
+---
+
+### 4. Access the Application
+
+After Docker finishes starting the containers, open the frontend in your browser:
+
+```text
+http://localhost:<frontend-port>
+```
+
+The backend/API will run on the port configured in `docker-compose.yml`.
+
+---
+
+### 5. Stop the Project
+
+To stop the application:
+
+```bash
+docker compose down
+```
+
+---
+
+### 6. Run the Project Again
+
+If the project has already been built, run:
+
+```bash
+docker compose up
+```
+
+If you make changes to the Docker configuration or dependencies, run:
+
+```bash
+docker compose up --build
+```
+
+---
+
+### ⚠️ Important
+
+* Docker Desktop must be installed and running.
+* Do not manually install project dependencies.
+* Do not modify the Dockerfiles unless required.
+* Make sure the required ports are not being used by another application.
+* The project is configured to run using `docker-compose.yml`.
+
+---
+
+## Manual Setup (Without Docker)
 
 ### 1. Backend
 
