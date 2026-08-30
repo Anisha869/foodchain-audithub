@@ -1,0 +1,23 @@
+services:
+
+  backend:
+    build:
+      context: ./server
+    container_name: foodchain-backend
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./server/.env
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./client
+    container_name: foodchain-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:5000/api
+    depends_on:
+      - backend
+    restart: unless-stopped
