@@ -1,5 +1,14 @@
 # FoodChain AuditHub
 
+## Netlify deployment
+
+Netlify hosts the React client only. Deploy the `server` directory to a Node-compatible host, then configure these environment variables:
+
+- Netlify: `VITE_API_BASE_URL=https://<your-api-host>/api`
+- API host: `MONGODB_URI`, `JWT_SECRET`, and `CLIENT_URL=https://<your-site>.netlify.app`
+
+After changing `VITE_API_BASE_URL`, trigger a new Netlify deploy because Vite embeds environment variables during the build. The API should respond at `https://<your-api-host>/api/health` before testing login.
+
 **Second-Party Food Safety Audit & Compliance Management Platform**
 
 A responsive, mobile-first PWA for managing second-party food safety audits: scheduling, mobile checklist execution, findings, technical review, CAPA management, reporting, analytics, and optional AI-assisted suggestions.

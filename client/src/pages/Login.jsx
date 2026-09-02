@@ -92,7 +92,12 @@ const Login = () => {
       const redirectTo = location.state?.from?.pathname || homeRouteForRole(user.role);
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || "Login failed. Please verify credentials.");
+      setError(
+        err.response?.data?.message ||
+          (err.request
+            ? "Unable to reach the API. Check the Netlify VITE_API_BASE_URL setting."
+            : "Login failed. Please verify credentials.")
+      );
     } finally {
       setSubmitting(false);
     }
