@@ -26,18 +26,22 @@ export const ALL_ROLE_MODELS = Object.values(ROLE_MODEL_MAP);
 export const getModelByRole = (role) => ROLE_MODEL_MAP[role];
 
 /**
- * Find a user by email across ALL role collections.
+ * Find a user by email across ALL role collections (parallelized for speed).
  * Returns { user, Model } or null.
  * Selects +password so login can compare hashes.
  */
 export const findUserByEmail = async (email) => {
   const normalised = email.toLowerCase().trim();
+  const entries = Object.entries(ROLE_MODEL_MAP);
 
-  for (const [role, Model] of Object.entries(ROLE_MODEL_MAP)) {
-    const user = await Model.findOne({ email: normalised }).select("+password");
-    if (user) return { user, Model };
-  }
-  return null;
+  const results = await Promise.all(
+    entries.map(async ([role, Model]) => {
+      const user = await Model.findOne({ email: normalised }).select("+password");
+      return user ? { user, Model } : null;
+    })
+  );
+
+  return results.find((res) => res !== null) || null;
 };
 
 /**
@@ -50,14 +54,15 @@ export const findUserByIdAndRole = async (id, role) => {
 };
 
 /**
- * Find a user by _id across ALL role collections (slower — use when role is unknown).
+ * Find a user by _id across ALL role collections (parallelized for speed).
  */
 export const findUserById = async (id) => {
-  for (const Model of ALL_ROLE_MODELS) {
-    const user = await Model.findById(id);
-    if (user) return user;
-  }
-  return null;
+  const results = await Promise.all(
+    ALL_ROLE_MODELS.map(async (Model) => {
+      return await Model.findById(id);
+    })
+  );
+  return results.find((u) => u !== null) || null;
 };
 
 export default ROLE_MODEL_MAP;

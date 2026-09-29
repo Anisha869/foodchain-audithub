@@ -22,7 +22,13 @@ import {
   X,
   Check,
   AlertTriangle,
-  MinusCircle
+  MinusCircle,
+  User,
+  Edit,
+  Award,
+  Briefcase,
+  Phone,
+  MapPin
 } from "lucide-react";
 
 const AuditorDashboard = () => {
@@ -51,6 +57,54 @@ const AuditorDashboard = () => {
 
   // Preview Checklist Modal state
   const [previewChecklist, setPreviewChecklist] = useState(null);
+
+  // Auditor Profile Modal state
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    name: "",
+    phone: "",
+    specialization: "",
+    certifications: "",
+    experienceYears: 0,
+    qualification: "",
+    auditorIdCode: "",
+    address: "",
+    bio: ""
+  });
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  const handleOpenProfile = () => {
+    setProfileForm({
+      name: user?.name || "",
+      phone: user?.phone || "",
+      specialization: user?.specialization || "",
+      certifications: Array.isArray(user?.certifications) ? user.certifications.join(", ") : (user?.certifications || ""),
+      experienceYears: user?.experienceYears || 0,
+      qualification: user?.qualification || "",
+      auditorIdCode: user?.auditorIdCode || "",
+      address: user?.address || "",
+      bio: user?.bio || ""
+    });
+    setShowProfileModal(true);
+  };
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    try {
+      setSavingProfile(true);
+      setErrorMsg("");
+      const { data } = await api.put("/auth/profile", profileForm);
+      localStorage.setItem("fah_user", JSON.stringify(data.user));
+      setSuccessMsg("Auditor details updated & saved to MongoDB successfully!");
+      setShowProfileModal(false);
+      fetchData();
+    } catch (err) {
+      console.error("Profile update error:", err);
+      setErrorMsg(err.response?.data?.message || "Failed to save auditor details.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
   
   // UI messages
   const [errorMsg, setErrorMsg] = useState("");
@@ -640,16 +694,27 @@ const AuditorDashboard = () => {
                 <ClipboardList size={14} className="text-emerald-700" />
                 Field Compliance Auditor
               </span>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Auditor: {user?.name}</h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Auditor: {user?.name}</h1>
+                <button
+                  onClick={handleOpenProfile}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all cursor-pointer"
+                >
+                  <User size={14} />
+                  Edit Auditor Profile Details
+                </button>
+              </div>
               <p className="text-sm font-light text-slate-600 max-w-2xl">
                 Review assigned audits, inspect uploaded customer checklists, perform field evaluations, and submit completed audit reports.
               </p>
             </div>
-            <div className="flex bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 items-center gap-3">
-              <UserCheck className="text-emerald-700" size={24} />
-              <div>
-                <h4 className="text-xs font-bold text-slate-800">Assigned Tasks</h4>
-                <p className="text-[10px] text-slate-500">Pick any pending inspection assignment below.</p>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="flex bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 items-center gap-3">
+                <UserCheck className="text-emerald-700" size={24} />
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800">Assigned Tasks</h4>
+                  <p className="text-[10px] text-slate-500">Pick any pending inspection assignment below.</p>
+                </div>
               </div>
             </div>
           </div>
@@ -1005,6 +1070,147 @@ const AuditorDashboard = () => {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Auditor Profile Modal */}
+      {showProfileModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden border border-slate-200">
+            <div className="p-5 bg-gradient-to-r from-emerald-600 to-teal-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <User size={20} />
+                <h3 className="font-bold text-base">Auditor Profile &amp; MongoDB Details</h3>
+              </div>
+              <button 
+                onClick={() => setShowProfileModal(false)}
+                className="p-1 hover:bg-white/20 rounded-full transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileForm.name}
+                    onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number</label>
+                  <input
+                    type="text"
+                    value={profileForm.phone}
+                    onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                    placeholder="+1 555-0199"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Auditor ID Code</label>
+                  <input
+                    type="text"
+                    value={profileForm.auditorIdCode}
+                    onChange={(e) => setProfileForm({ ...profileForm, auditorIdCode: e.target.value })}
+                    placeholder="AUD-REG-1042"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Years of Experience</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={profileForm.experienceYears}
+                    onChange={(e) => setProfileForm({ ...profileForm, experienceYears: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Specialization Standard</label>
+                  <input
+                    type="text"
+                    value={profileForm.specialization}
+                    onChange={(e) => setProfileForm({ ...profileForm, specialization: e.target.value })}
+                    placeholder="FSSAI, ISO 22000, HACCP, BRCGS"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Qualification / Degree</label>
+                  <input
+                    type="text"
+                    value={profileForm.qualification}
+                    onChange={(e) => setProfileForm({ ...profileForm, qualification: e.target.value })}
+                    placeholder="B.Tech Food Tech / M.Sc Microbiology"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Certifications (comma separated)</label>
+                <input
+                  type="text"
+                  value={profileForm.certifications}
+                  onChange={(e) => setProfileForm({ ...profileForm, certifications: e.target.value })}
+                  placeholder="Lead Auditor ISO 22000, FSSAI Certified Master Trainer, HACCP Professional"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Address / Region</label>
+                <input
+                  type="text"
+                  value={profileForm.address}
+                  onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
+                  placeholder="HQ North Region, Industrial Hub"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Auditor Bio &amp; Professional Summary</label>
+                <textarea
+                  rows={3}
+                  value={profileForm.bio}
+                  onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
+                  placeholder="Certified lead auditor specializing in food safety management systems and manufacturing hygiene audits..."
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowProfileModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingProfile}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Save size={14} />
+                  {savingProfile ? "Saving to MongoDB..." : "Save Auditor Details"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

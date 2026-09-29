@@ -33,6 +33,8 @@ export const getAudits = async (req, res) => {
       .populate("customerId", "companyName code contactPerson email")
       .populate("siteId", "siteName siteCode address city state")
       .populate("checklistId", "name standard description")
+      .populate("auditorId", "name email phone specialization certifications experienceYears qualification auditorIdCode")
+      .populate("reviewerId", "name email phone")
       .sort({ scheduledDate: -1 });
       
     res.status(200).json({
@@ -53,7 +55,9 @@ export const getAuditById = async (req, res) => {
     const audit = await Audit.findById(req.params.id)
       .populate("customerId", "companyName code contactPerson email")
       .populate("siteId", "siteName siteCode address city state")
-      .populate("checklistId", "name standard description items");
+      .populate("checklistId", "name standard description items")
+      .populate("auditorId", "name email phone specialization certifications experienceYears qualification auditorIdCode")
+      .populate("reviewerId", "name email phone");
       
     if (!audit) {
       return res.status(404).json({ message: "Audit not found" });
@@ -75,10 +79,10 @@ export const getAuditById = async (req, res) => {
 };
 
 // @route   POST /api/audits
-// @access  Private (Admin, Auditor)
+// @access  Private (Admin, Auditor, Planner)
 export const createAudit = async (req, res) => {
   try {
-    const { customerId, siteId, standard, scheduledDate, notes, checklistId } = req.body;
+    const { customerId, siteId, standard, scheduledDate, notes, checklistId, auditorId: bodyAuditorId } = req.body;
     
     let targetCustId = customerId;
     if (!targetCustId) {
@@ -119,9 +123,9 @@ export const createAudit = async (req, res) => {
     const randNum = Math.floor(1000 + Math.random() * 9000);
     const auditRef = `${refPrefix}-${randNum}`;
     
-    // Check if auditor is scheduling this
-    let auditorId = null;
-    if (req.user.role === "auditor") {
+    // Set auditorId from body if provided, or from logged-in user if auditor
+    let auditorId = bodyAuditorId || null;
+    if (!auditorId && req.user.role === "auditor") {
       auditorId = req.user._id;
     }
 
@@ -163,7 +167,9 @@ export const createAudit = async (req, res) => {
     const populatedAudit = await Audit.findById(audit._id)
       .populate("customerId", "companyName code contactPerson email")
       .populate("siteId", "siteName siteCode address city state")
-      .populate("checklistId", "name standard description");
+      .populate("checklistId", "name standard description")
+      .populate("auditorId", "name email phone specialization certifications experienceYears qualification auditorIdCode")
+      .populate("reviewerId", "name email phone");
     
     res.status(201).json({
       success: true,
@@ -173,6 +179,46 @@ export const createAudit = async (req, res) => {
   } catch (error) {
     console.error("Create audit error:", error.message);
     res.status(500).json({ message: "Server error while scheduling audit" });
+  }
+};
+
+// @route   PUT /api/audits/:id
+// @access  Private (Admin, Auditor, Planner)
+export const updateAudit = async (req, res) => {
+  try {
+    const { customerId, siteId, auditorId, reviewerId, standard, scheduledDate, status, notes } = req.body;
+    
+    const audit = await Audit.findById(req.params.id);
+    if (!audit) {
+      return res.status(404).json({ message: "Audit not found" });
+    }
+    
+    if (customerId) audit.customerId = customerId;
+    if (siteId) audit.siteId = siteId;
+    if (auditorId !== undefined) audit.auditorId = auditorId || null;
+    if (reviewerId !== undefined) audit.reviewerId = reviewerId || null;
+    if (standard) audit.standard = standard;
+    if (scheduledDate) audit.scheduledDate = scheduledDate;
+    if (status) audit.status = status;
+    if (notes !== undefined) audit.notes = notes;
+    
+    await audit.save();
+
+    const updatedAudit = await Audit.findById(audit._id)
+      .populate("customerId", "companyName code contactPerson email")
+      .populate("siteId", "siteName siteCode address city state")
+      .populate("checklistId", "name standard description")
+      .populate("auditorId", "name email phone specialization certifications experienceYears qualification auditorIdCode")
+      .populate("reviewerId", "name email phone");
+
+    res.status(200).json({
+      success: true,
+      message: "Audit updated successfully",
+      audit: updatedAudit
+    });
+  } catch (error) {
+    console.error("Update audit error:", error.message);
+    res.status(500).json({ message: "Server error while updating audit" });
   }
 };
 

@@ -55,12 +55,11 @@ const DEMO_ROLES = [
     icon: Building2,
     desc: "View audit reports, CAPA responses & compliance trends",
     color: "bg-amber-50 border-amber-200 text-amber-700",
-    badge: "bg-amber-100 text-amber-700 border-amber-200"
   }
 ];
 
 const Login = () => {
-  const { login, homeRouteForRole } = useAuth();
+  const { login, homeRouteForRole, isBackendConnected } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -70,7 +69,6 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [fontSize, setFontSize] = useState("normal");
 
   // read signup success from query params (after a recent signup)
   const params = new URLSearchParams(location.search);
@@ -92,7 +90,9 @@ const Login = () => {
       const redirectTo = location.state?.from?.pathname || homeRouteForRole(user.role);
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || "Login failed. Please verify credentials.");
+      setError(
+        err.response?.data?.message || err.message || "Login failed. Please verify credentials."
+      );
     } finally {
       setSubmitting(false);
     }
@@ -108,14 +108,14 @@ const Login = () => {
       const redirectTo = location.state?.from?.pathname || homeRouteForRole(user.role);
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError("Quick demo login failed. Standard admin login is ready below.");
+      setError(err.response?.data?.message || "Quick demo login failed. Standard sign in is ready.");
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className={`min-h-screen relative overflow-hidden py-10 px-4 bg-slate-50 text-slate-900 ${fontSize === 'large' ? 'text-lg' : 'text-base'}`}>
+    <div className="min-h-screen relative overflow-hidden py-10 px-4 bg-slate-50 text-slate-900 text-base">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.12),_transparent_20%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.1),_transparent_22%)]"></div>
       <div className="absolute left-0 top-24 h-72 w-72 rounded-full bg-emerald-200/30 blur-3xl" />
       <div className="absolute right-0 top-28 h-80 w-80 rounded-full bg-slate-900/5 blur-3xl" />
@@ -134,7 +134,6 @@ const Login = () => {
                 AuditHub
               </div>
 
-              {/* Minimal hero: creative visual + short tagline */}
               <div className="mt-8 flex items-center gap-8">
                 <div className="flex-1">
                   <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight">Second-party auditing</h1>
@@ -145,7 +144,6 @@ const Login = () => {
                   </div>
                 </div>
 
-                {/* Decorative SVG illustrating inspection / checklist */}
                 <div className="w-56 h-56 flex-shrink-0">
                   <svg viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
                     <defs>
@@ -165,7 +163,6 @@ const Login = () => {
                 </div>
               </div>
 
-              {/* Subtle callouts, reduced text */}
               <div className="mt-8 grid gap-4 sm:grid-cols-3">
                 <div className="rounded-[20px] border border-slate-200 bg-white p-4 flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600">
@@ -210,7 +207,8 @@ const Login = () => {
                   <h2 className="mt-3 text-3xl font-extrabold text-white">Sign in to AuditHub</h2>
                 </div>
                 <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-xs font-semibold text-white border border-white/20">
-                  <span className="h-2 w-2 rounded-full bg-emerald-200" /> Atlas live
+                  <span className={`h-2 w-2 rounded-full ${isBackendConnected ? "bg-emerald-300 animate-pulse" : "bg-emerald-200"}`} />
+                  {isBackendConnected === true ? "Atlas live" : isBackendConnected === false ? "Standalone Demo" : "Netlify live"}
                 </div>
               </div>
             </div>
@@ -316,11 +314,11 @@ const Login = () => {
                   <div className="mt-4 text-center text-sm text-slate-600">
                     <p className="mb-2">Don't have an account? Create one for a specific module:</p>
                     <div className="flex items-center justify-center gap-2 flex-wrap">
-                      <Link to="/signup/admin" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs">Admin</Link>
-                      <Link to="/signup/planner" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs">Planner</Link>
-                      <Link to="/signup/auditor" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs">Auditor</Link>
-                      <Link to="/signup/reviewer" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs">Reviewer</Link>
-                      <Link to="/signup/customer" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs">Customer</Link>
+                      <Link to="/signup/admin" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs hover:border-emerald-500">Admin</Link>
+                      <Link to="/signup/planner" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs hover:border-emerald-500">Planner</Link>
+                      <Link to="/signup/auditor" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs hover:border-emerald-500">Auditor</Link>
+                      <Link to="/signup/reviewer" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs hover:border-emerald-500">Reviewer</Link>
+                      <Link to="/signup/customer" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs hover:border-emerald-500">Customer</Link>
                     </div>
                   </div>
                 </>
@@ -328,15 +326,15 @@ const Login = () => {
 
               {activeTab === "quick-demo" && (
                 <div className="space-y-5">
-                  <p className="text-sm text-slate-600">Select a role to create an account for that module — signup is required; no automatic demo login.</p>
+                  <p className="text-sm text-slate-600">Click any role below for 1-click instant login into that module's live dashboard:</p>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {DEMO_ROLES.map(({ role, name, email: demoEmail, pass: demoPass, icon: Icon, desc, color, badge }) => (
                       <button
                         key={role}
                         type="button"
                         disabled={submitting}
-                        onClick={() => navigate(`/signup/${role}`)}
-                        className={`rounded-3xl border px-4 py-5 text-left transition-all duration-200 ${color} ${badge} shadow-sm hover:-translate-y-0.5 hover:shadow-md`}
+                        onClick={() => handleQuickLogin(demoEmail, demoPass)}
+                        className={`rounded-3xl border px-4 py-5 text-left transition-all duration-200 ${color} shadow-sm hover:-translate-y-0.5 hover:shadow-md cursor-pointer`}
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
@@ -348,7 +346,7 @@ const Login = () => {
                               <p className="text-xs text-slate-500">{role}</p>
                             </div>
                           </div>
-                          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${badge}`}>Demo</span>
+                          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${badge}`}>1-Click Login</span>
                         </div>
                         <p className="mt-3 text-xs text-slate-600">{desc}</p>
                       </button>
@@ -365,3 +363,4 @@ const Login = () => {
 };
 
 export default Login;
+

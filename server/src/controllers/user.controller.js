@@ -51,7 +51,7 @@ export const getUsers = async (req, res) => {
 // @access  Private (Admin)
 export const createUser = async (req, res) => {
   try {
-    const { name, email, password, role, phone, customerId } = req.body;
+    const { name, email, password, role, phone, customerId, specialization, certifications, experienceYears, qualification, auditorIdCode, address, bio } = req.body;
 
     if (!name || !email || !password || !role) {
       return res.status(400).json({ message: "Name, email, password, and role are required" });
@@ -62,6 +62,10 @@ export const createUser = async (req, res) => {
       return res.status(400).json({ message: "Invalid role specified" });
     }
 
+    const certsArray = Array.isArray(certifications)
+      ? certifications
+      : (typeof certifications === "string" ? certifications.split(",").map((c) => c.trim()).filter(Boolean) : []);
+
     const user = await Model.create({
       name,
       email: email.toLowerCase().trim(),
@@ -69,6 +73,13 @@ export const createUser = async (req, res) => {
       role,
       phone,
       customerId: customerId || null,
+      specialization: specialization || "",
+      certifications: certsArray,
+      experienceYears: Number(experienceYears) || 0,
+      qualification: qualification || "",
+      auditorIdCode: auditorIdCode || "",
+      address: address || "",
+      bio: bio || "",
       isActive: true,
     });
 
@@ -86,7 +97,7 @@ export const createUser = async (req, res) => {
 // @access  Private (Admin)
 export const updateUser = async (req, res) => {
   try {
-    const { name, phone, role, customerId } = req.body;
+    const { name, phone, role, customerId, specialization, certifications, experienceYears, qualification, auditorIdCode, address, bio } = req.body;
 
     const user = await findUserById(req.params.id);
     if (!user) {
@@ -96,6 +107,17 @@ export const updateUser = async (req, res) => {
     if (name) user.name = name;
     if (phone !== undefined) user.phone = phone;
     if (customerId !== undefined) user.customerId = customerId || null;
+    if (specialization !== undefined) user.specialization = specialization;
+    if (certifications !== undefined) {
+      user.certifications = Array.isArray(certifications)
+        ? certifications
+        : (typeof certifications === "string" ? certifications.split(",").map((c) => c.trim()).filter(Boolean) : []);
+    }
+    if (experienceYears !== undefined) user.experienceYears = Number(experienceYears) || 0;
+    if (qualification !== undefined) user.qualification = qualification;
+    if (auditorIdCode !== undefined) user.auditorIdCode = auditorIdCode;
+    if (address !== undefined) user.address = address;
+    if (bio !== undefined) user.bio = bio;
 
     await user.save();
 

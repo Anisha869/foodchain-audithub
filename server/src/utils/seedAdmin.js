@@ -13,10 +13,23 @@ const seedUsers = [
     role: "admin",
   },
   {
-    name: "Field Auditor",
+    name: "Audit Planner",
+    email: "planner@foodchainaudithub.com",
+    password: "Planner@123",
+    role: "planner",
+  },
+  {
+    name: "Field Compliance Auditor",
     email: "auditor@foodchainaudithub.com",
     password: "Auditor@123",
     role: "auditor",
+    specialization: "FSSAI, ISO 22000, HACCP",
+    certifications: ["Lead Auditor ISO 22000", "FSSAI Certified Master Trainer"],
+    experienceYears: 6,
+    qualification: "M.Sc Food Safety & Technology",
+    auditorIdCode: "AUD-REG-8821",
+    address: "North Zone Quality Desk",
+    bio: "Certified lead compliance auditor with 6+ years experience in second-party food safety inspections.",
   },
   {
     name: "Technical Reviewer",
@@ -25,7 +38,7 @@ const seedUsers = [
     role: "reviewer",
   },
   {
-    name: "Customer User",
+    name: "Facility Quality Customer",
     email: "customer@foodchainaudithub.com",
     password: "Customer@123",
     role: "customer",
@@ -33,6 +46,55 @@ const seedUsers = [
 ];
 
 export const seedInitialUsers = async () => {
+  // 1. Seed Customer entity
+  let customerObj = null;
+  try {
+    const Customer = (await import("../models/Customer.js")).default;
+    customerObj = await Customer.findOne({ code: "FC-QP01" });
+    if (!customerObj) {
+      customerObj = await Customer.create({
+        companyName: "FoodChain Quality Processing Client",
+        code: "FC-QP01",
+        contactPerson: "Quality Assurance Desk",
+        email: "client@foodchainaudithub.com",
+        phone: "+1 555-0199",
+        address: "100 Quality Processing Way, Industrial Zone",
+        industryCategory: "Food Processing & Logistics",
+        isActive: true,
+      });
+      console.log("✅ Seeded [customers] collection: FoodChain Quality Processing Client");
+    }
+  } catch (err) {
+    console.error("Customer seed error:", err.message);
+  }
+
+  // 2. Seed Site entity
+  let siteObj = null;
+  try {
+    if (customerObj) {
+      const Site = (await import("../models/Site.js")).default;
+      siteObj = await Site.findOne({ siteCode: "CPP-01" });
+      if (!siteObj) {
+        siteObj = await Site.create({
+          customerId: customerObj._id,
+          siteName: "Central Processing Facility",
+          siteCode: "CPP-01",
+          address: "100 Quality Processing Way, Block B",
+          city: "Metropolis",
+          state: "State HQ",
+          contactPerson: "Site Operations Manager",
+          contactPhone: "+1 555-0188",
+          isActive: true,
+        });
+        console.log("✅ Seeded [sites] collection: Central Processing Facility");
+      }
+    }
+  } catch (err) {
+    console.error("Site seed error:", err.message);
+  }
+
+  // 3. Seed Role Users (Admin, Planner, Auditor, Reviewer, CustomerUser)
+  let auditorUser = null;
   for (const userData of seedUsers) {
     const Model = getModelByRole(userData.role);
     if (!Model) continue;
@@ -40,23 +102,31 @@ export const seedInitialUsers = async () => {
     const existing = await Model.findOne({ email: userData.email });
 
     if (existing) {
-      console.log(`ℹ️ User already exists in ${userData.role} collection: ${userData.email}`);
+      if (userData.role === "auditor") auditorUser = existing;
+      console.log(`ℹ️ User exists in [${userData.role}s] collection: ${userData.email}`);
       continue;
     }
 
-    await Model.create({
+    const payload = {
       ...userData,
       isActive: true,
-    });
+    };
+    if (userData.role === "customer" && customerObj) {
+      payload.customerId = customerObj._id;
+    }
+
+    const created = await Model.create(payload);
+    if (userData.role === "auditor") auditorUser = created;
     console.log(`✅ User created in [${userData.role}s] collection: ${userData.email}`);
   }
 
-  // Seed default checklist if none exists
+  // 4. Seed Master Checklist format
+  let masterChecklist = null;
   try {
     const Checklist = (await import("../models/Checklist.js")).default;
-    const existingChecklist = await Checklist.findOne();
-    if (!existingChecklist) {
-      await Checklist.create({
+    masterChecklist = await Checklist.findOne();
+    if (!masterChecklist) {
+      masterChecklist = await Checklist.create({
         name: "FSSAI Food Hygiene & Safety Master Checklist",
         standard: "FSSAI",
         description: "Standard Food Safety Audit checklist covering hygiene, temperature, storage, and pest control.",
@@ -76,10 +146,67 @@ export const seedInitialUsers = async () => {
         ],
         isActive: true
       });
-      console.log("✅ Seeded default FSSAI Master Checklist");
+      console.log("✅ Seeded [checklists] collection: Master FSSAI Checklist");
     }
   } catch (err) {
     console.error("Checklist seeding error:", err.message);
+  }
+
+  // 5. Seed Audit record
+  let sampleAudit = null;
+  try {
+    const Audit = (await import("../models/Audit.js")).default;
+    sampleAudit = await Audit.findOne({ auditRef: "FSSA-1001" });
+    if (!sampleAudit && customerObj && siteObj) {
+      sampleAudit = await Audit.create({
+        auditRef: "FSSA-1001",
+        customerId: customerObj._id,
+        siteId: siteObj._id,
+        auditorId: auditorUser ? auditorUser._id : null,
+        checklistId: masterChecklist ? masterChecklist._id : null,
+        standard: "FSSAI",
+        scheduledDate: new Date(),
+        status: "SCHEDULED",
+        score: null,
+        answers: masterChecklist ? masterChecklist.items.map((item) => ({
+          itemId: item._id.toString(),
+          question: item.question,
+          category: item.category,
+          score: 10,
+          maxScore: 10,
+          comment: "",
+          severity: "None",
+          evidence: ""
+        })) : [],
+        notes: "Initial scheduled second-party hygiene audit."
+      });
+      console.log("✅ Seeded [audits] collection: Initial Audit Ref FSSA-1001");
+    }
+  } catch (err) {
+    console.error("Audit seeding error:", err.message);
+  }
+
+  // 6. Seed Finding record
+  try {
+    if (sampleAudit) {
+      const Finding = (await import("../models/Finding.js")).default;
+      const existingFinding = await Finding.findOne({ auditId: sampleAudit._id });
+      if (!existingFinding) {
+        await Finding.create({
+          auditId: sampleAudit._id,
+          category: "Temperature Control",
+          severity: "minor",
+          description: "Digital temperature log display offset by 0.5 degrees.",
+          evidence: "Calibration logger certificate inspection",
+          correctiveAction: "Recalibrate temperature sensor probe within 7 days.",
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          status: "open"
+        });
+        console.log("✅ Seeded [findings] collection: Sample non-conformity finding");
+      }
+    }
+  } catch (err) {
+    console.error("Finding seeding error:", err.message);
   }
 };
 

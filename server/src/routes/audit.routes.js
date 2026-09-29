@@ -3,6 +3,7 @@ import {
   getAudits,
   getAuditById,
   createAudit,
+  updateAudit,
   startAuditChecklist,
   submitAuditGrades,
   reviewAudit
@@ -20,7 +21,10 @@ router
   .get(getAudits)
   .post(authorize("admin", "auditor", "planner"), createAudit);
 
-router.route("/:id").get(getAuditById);
+router
+  .route("/:id")
+  .get(getAuditById)
+  .put(authorize("admin", "auditor", "planner"), updateAudit);
 
 router.post("/:id/start-checklist", authorize("auditor"), startAuditChecklist);
 router.put("/:id/submit-grades", authorize("auditor"), submitAuditGrades);

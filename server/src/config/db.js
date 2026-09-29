@@ -7,12 +7,18 @@ let memoryServerInstance = null;
 const connectDB = async () => {
   const uri = process.env.MONGODB_URI;
 
-  if (uri) {
+  const isConfiguredAtlas =
+    uri &&
+    !uri.includes("your_mongodb_atlas_connection_string_here") &&
+    (uri.startsWith("mongodb://") || uri.startsWith("mongodb+srv://"));
+
+  if (isConfiguredAtlas) {
     try {
       const conn = await mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 3000,
+        serverSelectionTimeoutMS: 2000,
       });
       console.log(`✅ Atlas MongoDB connected: ${conn.connection.host}`);
+      await seedInitialUsers();
       return;
     } catch (error) {
       console.warn(`⚠️ Could not connect to Atlas MongoDB (${error.message}).`);

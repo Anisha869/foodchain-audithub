@@ -1,7 +1,10 @@
-﻿import axios from "axios";
+import axios from "axios";
+
+const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api",
+  baseURL: configuredBaseUrl || "http://localhost:5000/api",
+  timeout: 2500, // 2.5-second timeout for responsive fallback
 });
 
 // Attach the JWT (if present) to every outgoing request
@@ -9,7 +12,7 @@ api.interceptors.request.use((config) => {
   const token = localStorage.getItem("fah_token");
   if (token) {
     config.headers = config.headers || {};
-    config.headers.Authorization = 'Bearer ' + token;
+    config.headers.Authorization = "Bearer " + token;
   }
   return config;
 });
@@ -30,4 +33,5 @@ api.interceptors.response.use(
 );
 
 export default api;
+
 

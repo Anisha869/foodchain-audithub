@@ -84,6 +84,13 @@ const createUserSchema = (role, extraFields = {}) => {
     if (this.customerId !== undefined) {
       obj.customerId = this.customerId;
     }
+    if (this.specialization !== undefined) obj.specialization = this.specialization;
+    if (this.certifications !== undefined) obj.certifications = this.certifications;
+    if (this.experienceYears !== undefined) obj.experienceYears = this.experienceYears;
+    if (this.qualification !== undefined) obj.qualification = this.qualification;
+    if (this.auditorIdCode !== undefined) obj.auditorIdCode = this.auditorIdCode;
+    if (this.address !== undefined) obj.address = this.address;
+    if (this.bio !== undefined) obj.bio = this.bio;
     return obj;
   };
 
