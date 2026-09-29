@@ -16,7 +16,7 @@ const Signup = () => {
   const [submitting, setSubmitting] = useState(false);
 
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { signup } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -29,12 +29,10 @@ const Signup = () => {
 
     setSubmitting(true);
     try {
-      const { data } = await api.post(`/auth/signup/${role}`, { name, email, password, phone });
-      // Signup now only creates the user in the DB. Do not auto-login.
-      // Redirect to login and show a success message so the user can sign in.
+      await signup({ name, email, password, role, phone });
       navigate(`/login?signup=success&role=${encodeURIComponent(role)}`, { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || "Signup failed");
+      setError(err.response?.data?.message || err.message || "Signup failed");
     } finally {
       setSubmitting(false);
     }

@@ -6,13 +6,17 @@ let memoryServerInstance = null;
 const connectDB = async () => {
   const uri = process.env.MONGODB_URI;
 
-  if (uri) {
+  const isConfiguredAtlas =
+    uri &&
+    !uri.includes("your_mongodb_atlas_connection_string_here") &&
+    (uri.startsWith("mongodb://") || uri.startsWith("mongodb+srv://"));
+
+  if (isConfiguredAtlas) {
     try {
       const conn = await mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 15000,
-        dbName: process.env.MONGODB_DB_NAME || "foodchain-audithub",
+        serverSelectionTimeoutMS: 3000,
       });
-      console.log(`✅ MongoDB connected: ${conn.connection.host}/${conn.connection.name}`);
+      console.log(`✅ Atlas MongoDB connected: ${conn.connection.host}`);
       return;
     } catch (error) {
       throw new Error(`Could not connect to MongoDB (${error.message})`, { cause: error });
