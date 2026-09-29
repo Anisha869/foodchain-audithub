@@ -49,6 +49,6 @@ const siteSchema = new mongoose.Schema(
 
 siteSchema.index({ customerId: 1, siteCode: 1 });
 
-const Site = mongoose.model("Site", siteSchema);
+const Site = mongoose.model("Site", siteSchema, "sites");
 
 export default Site;

@@ -77,8 +77,8 @@ async function startServer() {
   try {
     await connectDB();
   } catch (dbErr) {
-    console.error('Database connection failed during startup:', dbErr);
-    // continue; some environments intentionally run without DB
+    console.error("Database connection failed during startup:", dbErr.message);
+    process.exit(1);
   }
 
   const server = app.listen(PORT, () => {

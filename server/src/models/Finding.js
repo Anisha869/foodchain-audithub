@@ -49,7 +49,7 @@ const findingSchema = new mongoose.Schema(
 findingSchema.index({ auditId: 1 });
 findingSchema.index({ severity: 1, status: 1 });
 
-const Finding = mongoose.model("Finding", findingSchema);
+const Finding = mongoose.model("Finding", findingSchema, "findings");
 
 export default Finding;
 export { SEVERITY_LEVELS, FINDING_STATUSES };

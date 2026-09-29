@@ -4,10 +4,25 @@
 
 Netlify hosts the React client only. Deploy the `server` directory to a Node-compatible host, then configure these environment variables:
 
+For the Netlify build settings, use the repository root as the base directory and use:
+
+- Base directory: leave blank (repository root)
+- Package directory: leave blank
+- Build command: `cd client && npm run build`
+- Publish directory: `client/dist`
+
+Keeping the base directory at the repository root prevents Netlify from automatically prefixing the package and publish directories with `client/`. These settings are also stored in `netlify.toml` at the repository root.
+
 - Netlify: `VITE_API_BASE_URL=https://<your-api-host>/api`
-- API host: `MONGODB_URI`, `JWT_SECRET`, and `CLIENT_URL=https://<your-site>.netlify.app`
+- API host: `MONGODB_URI`, `MONGODB_DB_NAME=foodchain-audithub`, `JWT_SECRET`, and `CLIENT_URL=https://<your-site>.netlify.app`
 
 After changing `VITE_API_BASE_URL`, trigger a new Netlify deploy because Vite embeds environment variables during the build. The API should respond at `https://<your-api-host>/api/health` before testing login.
+
+### MongoDB collections
+
+The API connects to the database selected by `MONGODB_DB_NAME` (default: `foodchain-audithub`). It writes role accounts to `admins`, `planners`, `auditors`, `reviewers`, and `customer_users`; business and application records go to `customers`, `sites`, `audits`, and `checklists`. MongoDB creates each collection when its first document is saved.
+
+`GET /api/users` combines the role-specific account collections. It does not write duplicate accounts to the legacy `users` collection, so that collection is not used by the current app.
 
 **Second-Party Food Safety Audit & Compliance Management Platform**
 
@@ -168,6 +183,13 @@ Edit `server/.env` and set at minimum:
 MONGODB_URI=<your MongoDB Atlas connection string>
 JWT_SECRET=<any long random string>
 ```
+
+Set `MONGODB_DB_NAME=foodchain-audithub` to select the Atlas database explicitly. The API defaults to this database if the setting is omitted.
+
+The API exits on startup if it cannot connect to MongoDB, rather than silently
+storing accounts in a temporary database. For local-only testing without Atlas,
+leave `MONGODB_URI` blank and set `MONGODB_MEMORY=true`; this database is lost
+when the server stops.
 
 Seed the first admin account:
 

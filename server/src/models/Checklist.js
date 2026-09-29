@@ -65,6 +65,6 @@ const checklistSchema = new mongoose.Schema(
 checklistSchema.index({ standard: 1 });
 checklistSchema.index({ customerId: 1 });
 
-const Checklist = mongoose.model("Checklist", checklistSchema);
+const Checklist = mongoose.model("Checklist", checklistSchema, "checklists");
 
 export default Checklist;

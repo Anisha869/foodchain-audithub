@@ -95,7 +95,7 @@ auditSchema.index({ customerId: 1, status: 1 });
 auditSchema.index({ auditorId: 1 });
 auditSchema.index({ scheduledDate: -1 });
 
-const Audit = mongoose.model("Audit", auditSchema);
+const Audit = mongoose.model("Audit", auditSchema, "audits");
 
 export default Audit;
 export { AUDIT_STATUSES };

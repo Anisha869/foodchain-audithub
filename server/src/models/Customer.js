@@ -48,6 +48,6 @@ const customerSchema = new mongoose.Schema(
 
 customerSchema.index({ code: 1, companyName: 1 });
 
-const Customer = mongoose.model("Customer", customerSchema);
+const Customer = mongoose.model("Customer", customerSchema, "customers");
 
 export default Customer;
