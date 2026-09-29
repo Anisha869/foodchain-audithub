@@ -5,10 +5,13 @@ const AuthContext = createContext(null);
 
 const ROLE_HOME = {
   admin: "/admin/dashboard",
+  planner: "/admin/dashboard",
   auditor: "/auditor/dashboard",
   reviewer: "/reviewer/dashboard",
   customer: "/customer/dashboard",
 };
+
+const ALLOWED_ROLES = Object.keys(ROLE_HOME);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -69,6 +72,19 @@ export const AuthProvider = ({ children }) => {
     return data.user;
   };
 
+  const signup = async ({ name, email, password, role, phone }) => {
+    const safeRole = ALLOWED_ROLES.includes(role) ? role : "customer";
+    const { data } = await api.post(`/auth/signup/${safeRole}`, {
+      name,
+      email,
+      password,
+      role: safeRole,
+      phone,
+    });
+
+    return data.user;
+  };
+
   const logout = () => {
     localStorage.removeItem("fah_token");
     localStorage.removeItem("fah_user");
@@ -79,7 +95,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, logout, isAuthenticated: !!user, homeRouteForRole, isBackendConnected }}
+      value={{ user, loading, login, signup, logout, isAuthenticated: !!user, homeRouteForRole, isBackendConnected }}
     >
       {children}
     </AuthContext.Provider>
