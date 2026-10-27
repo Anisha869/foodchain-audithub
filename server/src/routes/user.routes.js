@@ -4,6 +4,7 @@ import {
   createUser,
   updateUser,
   toggleUserStatus,
+  approveUser,
   resetUserPassword,
 } from "../controllers/user.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
@@ -19,6 +20,7 @@ router.route("/").get(getUsers).post(createUser);
 router.route("/:id").put(updateUser);
 
 router.patch("/:id/toggle-status", toggleUserStatus);
+router.patch("/:id/approve", approveUser);
 router.post("/:id/reset-password", resetUserPassword);
 
 export default router;

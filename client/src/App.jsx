@@ -27,7 +27,7 @@ function App() {
       <Route path="/signup" element={<Signup />} />
 
       {/* Admin */}
-      <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
+      <Route element={<ProtectedRoute allowedRoles={["admin", "planner"]} />}>
         <Route element={<MainLayout />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
         </Route>

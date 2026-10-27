@@ -1,37 +1,32 @@
-import Customer from "../models/Customer.js";
-import Site from "../models/Site.js";
+import dbService from "../services/dbService.js";
 
 // @route   GET /api/customers
 // @access  Private (Admin, Auditor, Reviewer)
 export const getCustomers = async (req, res) => {
   try {
+    if (req.user.role === "customer") {
+      const customer = req.user.customerId ? await dbService.getCustomerById(req.user.customerId) : null;
+      if (customer) {
+        customer.siteCount = await dbService.countSitesByCustomer(customer._id || customer.id);
+      }
+      return res.status(200).json({
+        success: true,
+        count: customer ? 1 : 0,
+        customers: customer ? [customer] : [],
+      });
+    }
+
     const { search, isActive } = req.query;
     const filter = {};
 
     if (isActive !== undefined && isActive !== "") {
       filter.isActive = isActive === "true";
     }
-
     if (search) {
-      filter.$or = [
-        { companyName: { $regex: search, $options: "i" } },
-        { code: { $regex: search, $options: "i" } },
-        { contactPerson: { $regex: search, $options: "i" } },
-      ];
+      filter.search = search;
     }
 
-    const customers = await Customer.find(filter).sort({ createdAt: -1 });
-    
-    // Attach site counts
-    const customersWithSites = await Promise.all(
-      customers.map(async (cust) => {
-        const siteCount = await Site.countDocuments({ customerId: cust._id });
-        return {
-          ...cust.toObject(),
-          siteCount,
-        };
-      })
-    );
+    const customersWithSites = await dbService.getCustomers(filter);
 
     res.status(200).json({
       success: true,
@@ -48,12 +43,15 @@ export const getCustomers = async (req, res) => {
 // @access  Private (Admin, Auditor, Reviewer, Customer)
 export const getCustomerById = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id);
+    const customer = await dbService.getCustomerById(req.params.id);
     if (!customer) {
       return res.status(404).json({ message: "Customer not found" });
     }
+    if (req.user.role === "customer" && customer._id.toString() !== req.user.customerId?.toString()) {
+      return res.status(403).json({ message: "Not authorized to access this customer" });
+    }
 
-    const sites = await Site.find({ customerId: customer._id });
+    const sites = await dbService.getSites(customer._id || customer.id);
 
     res.status(200).json({
       success: true,
@@ -76,12 +74,13 @@ export const createCustomer = async (req, res) => {
       return res.status(400).json({ message: "Company name, code, contact person, and email are required" });
     }
 
-    const existing = await Customer.findOne({ code: code.toUpperCase().trim() });
+    const existingList = await dbService.getCustomers();
+    const existing = existingList.find((c) => c.code?.toUpperCase() === code.toUpperCase().trim());
     if (existing) {
       return res.status(409).json({ message: "Customer code already exists" });
     }
 
-    const customer = await Customer.create({
+    const customer = await dbService.createCustomer({
       companyName,
       code: code.toUpperCase().trim(),
       contactPerson,
@@ -106,22 +105,10 @@ export const createCustomer = async (req, res) => {
 // @access  Private (Admin)
 export const updateCustomer = async (req, res) => {
   try {
-    const { companyName, contactPerson, email, phone, address, industryCategory, isActive } = req.body;
-
-    const customer = await Customer.findById(req.params.id);
+    const customer = await dbService.updateCustomer(req.params.id, req.body);
     if (!customer) {
       return res.status(404).json({ message: "Customer not found" });
     }
-
-    if (companyName) customer.companyName = companyName;
-    if (contactPerson) customer.contactPerson = contactPerson;
-    if (email) customer.email = email.toLowerCase().trim();
-    if (phone !== undefined) customer.phone = phone;
-    if (address !== undefined) customer.address = address;
-    if (industryCategory) customer.industryCategory = industryCategory;
-    if (isActive !== undefined) customer.isActive = isActive;
-
-    await customer.save();
 
     res.status(200).json({
       message: "Customer updated successfully",
@@ -137,7 +124,10 @@ export const updateCustomer = async (req, res) => {
 // @access  Private
 export const getCustomerSites = async (req, res) => {
   try {
-    const sites = await Site.find({ customerId: req.params.id });
+    if (req.user.role === "customer" && req.user.customerId?.toString() !== req.params.id) {
+      return res.status(403).json({ message: "Not authorized to access these facility sites" });
+    }
+    const sites = await dbService.getSites(req.params.id);
     res.status(200).json({ success: true, sites });
   } catch (error) {
     res.status(500).json({ message: "Error fetching customer sites" });
@@ -154,13 +144,13 @@ export const createCustomerSite = async (req, res) => {
       return res.status(400).json({ message: "Site name, code, and address are required" });
     }
 
-    const customer = await Customer.findById(req.params.id);
+    const customer = await dbService.getCustomerById(req.params.id);
     if (!customer) {
       return res.status(404).json({ message: "Customer not found" });
     }
 
-    const site = await Site.create({
-      customerId: customer._id,
+    const site = await dbService.createSite({
+      customerId: customer._id || customer.id,
       siteName,
       siteCode: siteCode.toUpperCase().trim(),
       address,

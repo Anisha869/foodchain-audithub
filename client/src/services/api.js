@@ -4,7 +4,7 @@ const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 
 const api = axios.create({
   baseURL: configuredBaseUrl || "http://localhost:5000/api",
-  timeout: 2500, // 2.5-second timeout for responsive fallback
+  timeout: 15000, // 15-second timeout for reliable data loading
 });
 
 // Attach the JWT (if present) to every outgoing request

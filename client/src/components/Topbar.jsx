@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 const ROLE_LABEL = {
   admin: "Admin / Audit Planner",
+  planner: "Audit Planner",
   auditor: "Field Auditor",
   reviewer: "Technical Reviewer",
   customer: "Customer / Facility",
@@ -38,7 +39,7 @@ const Topbar = ({ onMenuClick }) => {
               Active Session
             </span>
           </h2>
-          <p className="text-xs text-slate-500">Connected to MongoDB Atlas Workspace</p>
+          <p className="text-xs text-slate-500">FoodChain AuditHub Workspace</p>
         </div>
       </div>
 
@@ -68,4 +69,3 @@ const Topbar = ({ onMenuClick }) => {
 };
 
 export default Topbar;
-

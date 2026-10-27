@@ -1,0 +1,10 @@
+{
+  "end_task_accuracy": 0.771,
+  "recall_at_1": 0.875,
+  "recall_at_3": 0.948,
+  "mrr_at_k": 0.894,
+  "faithfulness_rate": 1.0,
+  "hallucinations_detected": 0,
+  "total_evaluated": 240,
+  "avg_latency_sec": 0.19
+}

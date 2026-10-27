@@ -14,15 +14,15 @@ For the Netlify build settings, use the repository root as the base directory an
 Keeping the base directory at the repository root prevents Netlify from automatically prefixing the package and publish directories with `client/`. These settings are also stored in `netlify.toml` at the repository root.
 
 - Netlify: `VITE_API_BASE_URL=https://<your-api-host>/api`
-- API host: `MONGODB_URI`, `MONGODB_DB_NAME=foodchain-audithub`, `JWT_SECRET`, and `CLIENT_URL=https://<your-site>.netlify.app`
+- API host: `SUPABASE_URL`, `SUPABASE_KEY`, `JWT_SECRET`, and `CLIENT_URL=https://<your-site>.netlify.app`
 
 After changing `VITE_API_BASE_URL`, trigger a new Netlify deploy because Vite embeds environment variables during the build. The API should respond at `https://<your-api-host>/api/health` before testing login.
 
-### MongoDB collections
+### Supabase database
 
-The API connects to the database selected by `MONGODB_DB_NAME` (default: `foodchain-audithub`). It writes role accounts to `admins`, `planners`, `auditors`, `reviewers`, and `customer_users`; business and application records go to `customers`, `sites`, `audits`, and `checklists`. MongoDB creates each collection when its first document is saved.
+Run [`supabase_schema.sql`](./supabase_schema.sql) in the Supabase SQL Editor to create or update the required tables and install the one-time administrator bootstrap function. The API uses the `users`, `customers`, `sites`, `audits`, `checklists`, and `findings` tables. Keep `SUPABASE_KEY` on the API host only; never expose a service-role key in the client.
 
-`GET /api/users` combines the role-specific account collections. It does not write duplicate accounts to the legacy `users` collection, so that collection is not used by the current app.
+The API requires Supabase and will stop at startup if the database or required tables are unavailable. In local development, values in `server/.env` take precedence over inherited shell variables to avoid accidentally connecting to a different Supabase project. Production deployments use the host's environment variables. The schema creates tables and policies only; it does not insert demo users, sample customers, or audits. Existing Supabase data is not deleted or changed by starting the API.
 
 **Second-Party Food Safety Audit & Compliance Management Platform**
 
@@ -34,7 +34,7 @@ Built incrementally in phases. This README will grow as each phase is added.
 
 ## Progress so far
 
-- ✅ Phase 1 — Project setup (Vite + React + Tailwind frontend, Express + MongoDB backend, health check)
+- ✅ Phase 1 — Project setup (Vite + React + Tailwind frontend, Express + Supabase backend, health check)
 - ✅ Phase 2 — Authentication (JWT, bcrypt, RBAC, protected routes, role-based dashboards)
 - ⬜ Phase 3 — Admin: user/customer/auditor/reviewer management
 - ⬜ Phase 4 — Audit management
@@ -44,7 +44,7 @@ Built incrementally in phases. This README will grow as each phase is added.
 - ⬜ Phase 8 — Customer portal & CAPA
 - ⬜ Phase 9 — Reports & analytics
 - ⬜ Phase 10 — Notifications & PWA
-- ⬜ Phase 11 — AI features
+- 🟡 Phase 11 — VERA reviewer analysis and audit Q&A implemented; additional AI features remain planned
 - ⬜ Phase 12 — Security hardening & polish
 
 ---
@@ -52,7 +52,7 @@ Built incrementally in phases. This README will grow as each phase is added.
 ## Tech Stack
 
 - **Frontend:** React, Vite, Tailwind CSS, React Router, Axios, Lucide React
-- **Backend:** Node.js, Express, MongoDB (Mongoose), JWT, bcrypt
+- **Backend:** Node.js, Express, Supabase, JWT, bcrypt
 - **Roles:** Admin/Audit Planner, Auditor, Technical Reviewer, Customer
 
 ---
@@ -62,7 +62,7 @@ Built incrementally in phases. This README will grow as each phase is added.
 ```
 foodchain-audithub/
   client/     # React + Vite frontend
-  server/     # Express + MongoDB backend
+  server/     # Express + Supabase backend
 ```
 
 ---
@@ -115,7 +115,7 @@ Docker will automatically:
 
 **No separate installation of Node.js, npm, or other project dependencies is required.**
 
-> Keep Docker Desktop running while using the application.
+> Keep Docker Desktop running while using the application. Configure `server/.env` with the Supabase credentials before starting the backend.
 
 ---
 
@@ -124,10 +124,10 @@ Docker will automatically:
 After Docker finishes starting the containers, open the frontend in your browser:
 
 ```text
-http://localhost:<frontend-port>
+http://localhost:5173
 ```
 
-The backend/API will run on the port configured in `docker-compose.yml`.
+The backend API is available at `http://localhost:5000/api`.
 
 ---
 
@@ -177,30 +177,22 @@ npm install
 cp .env.example .env
 ```
 
-Edit `server/.env` and set at minimum:
+For persistent storage, edit `server/.env` and set:
 
 ```
-MONGODB_URI=<your MongoDB Atlas connection string>
+SUPABASE_URL=<your Supabase project URL>
+SUPABASE_KEY=<your Supabase service role key>
 JWT_SECRET=<any long random string>
+ADMIN_BOOTSTRAP_TOKEN=<one-time random token for first admin setup>
 ```
 
-Set `MONGODB_DB_NAME=foodchain-audithub` to select the Atlas database explicitly. The API defaults to this database if the setting is omitted.
+Generate a strong bootstrap token (for example, `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`), set it only on the API host, and share it securely with the person creating the first administrator. The token is required only while no administrator exists; the database rejects later bootstrap attempts atomically. Remove the token from the API environment after first-admin setup.
 
-The API exits on startup if it cannot connect to MongoDB, rather than silently
-storing accounts in a temporary database. For local-only testing without Atlas,
-leave `MONGODB_URI` blank and set `MONGODB_MEMORY=true`; this database is lost
-when the server stops.
+The login page links to signup for customer, auditor, planner, reviewer, and first-admin roles. Customer accounts become active immediately. Auditor, planner, and reviewer signup requests stay pending until an administrator approves them from the Admin Dashboard. Signup never signs the user in automatically. First-admin setup requires the one-time token; subsequent administrator accounts must be created by an administrator.
 
-Seed the first admin account:
+### VERA RAG reviewer tools
 
-```bash
-npm run seed
-```
-
-This creates:
-
-- Email: `admin@foodchainaudithub.com`
-- Password: `Admin@12345`
+Reviewers can run VERA evidence analysis and ask questions about recorded audit observations for audits in `UNDER_REVIEW`. Analysis returns checklist verdicts, retrieved evidence, confidence/explanation details, and anomaly flags. It is advisory and read-only; the reviewer makes all final scoring and release decisions. The Q&A feature returns report excerpts rather than generated answers. Install the packages in `vera_rag/requirements.txt`; the first semantic-analysis request may download the sentence-transformer model. TF-IDF retrieval is used if model embeddings are unavailable.
 
 Run the backend:
 
@@ -225,20 +217,10 @@ npm run dev
 
 Frontend runs at `http://localhost:5173`.
 
-### 3. Login
+### 3. Create an account and sign in
 
-Go to `http://localhost:5173`, sign in with the seeded admin credentials above. You'll land on `/admin/dashboard`.
+Go to `http://localhost:5173` and create a customer account, or sign in with an account already provisioned in Supabase. There are no built-in demo login credentials.
 
-To test other roles, use the admin's JWT to call `POST /api/auth/register` (admin-only) with a `role` of `auditor`, `reviewer`, or `customer` — a proper "Create User" UI for this arrives in Phase 3.
-
-Example:
-
-```bash
-curl -X POST http://localhost:5000/api/auth/register \
-  -H "Authorization: Bearer <admin_token_from_login_response>" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Test Auditor","email":"auditor1@example.com","password":"Auditor@123","role":"auditor"}'
-```
 
 ---
 

@@ -1,0 +1,29 @@
+{
+  "traversal_precision": 1.0,
+  "average_hops": 2.0,
+  "okf_accuracy": 0.983,
+  "rag_accuracy_same_set": 0.771,
+  "head_to_head": {
+    "dimensions": [
+      "Target Landing Precision",
+      "Traceable Provenance",
+      "Noise Resistance",
+      "Sectional Clustering",
+      "End-Task Accuracy"
+    ],
+    "okf_scores": [
+      100.0,
+      99.4,
+      96.8,
+      98.2,
+      98.3
+    ],
+    "rag_scores": [
+      94.8,
+      88.5,
+      89.4,
+      91.0,
+      77.1
+    ]
+  }
+}

@@ -1,7 +1,13 @@
-import Audit from "../models/Audit.js";
-import Checklist from "../models/Checklist.js";
-import Customer from "../models/Customer.js";
-import Site from "../models/Site.js";
+import dbService from "../services/dbService.js";
+
+const sanitizeCustomerAudit = (audit) => ({
+  ...audit,
+  reviewerComments: "",
+  score: audit.status === "APPROVED" ? audit.score : null,
+  answers: audit.status === "APPROVED"
+    ? (audit.answers || []).map(({ veraAnalysis, ...answer }) => answer)
+    : [],
+});
 
 // @route   GET /api/audits
 // @access  Private (Admin, Auditor, Reviewer, Customer)
@@ -10,37 +16,24 @@ export const getAudits = async (req, res) => {
     const filter = {};
     
     if (req.user.role === "customer") {
-      let customerId = req.user.customerId;
+      const customerId = req.user.customerId;
       if (!customerId) {
-        const anyCust = await Customer.findOne();
-        if (anyCust) {
-          customerId = anyCust._id;
-          req.user.customerId = customerId;
-          await req.user.save();
-        }
+        return res.status(400).json({ message: "This account is not linked to a customer facility. Contact an administrator." });
       }
       filter.customerId = customerId;
     } else if (req.user.role === "auditor") {
-      // Show audits assigned to this auditor, or unassigned ones that they can take
-      filter.$or = [
-        { auditorId: req.user._id },
-        { auditorId: null }
-      ];
+      filter.auditorId = req.user._id || req.user.id;
     }
-    // Reviewers and Admins see ALL audits across all statuses
     
-    const audits = await Audit.find(filter)
-      .populate("customerId", "companyName code contactPerson email")
-      .populate("siteId", "siteName siteCode address city state")
-      .populate("checklistId", "name standard description")
-      .populate("auditorId", "name email phone specialization certifications experienceYears qualification auditorIdCode")
-      .populate("reviewerId", "name email phone")
-      .sort({ scheduledDate: -1 });
+    const records = await dbService.getAudits(filter);
+    const audits = req.user.role === "customer"
+      ? records.map(sanitizeCustomerAudit)
+      : records;
       
     res.status(200).json({
       success: true,
       count: audits.length,
-      audits
+      audits,
     });
   } catch (error) {
     console.error("Get audits error:", error.message);
@@ -52,25 +45,26 @@ export const getAudits = async (req, res) => {
 // @access  Private
 export const getAuditById = async (req, res) => {
   try {
-    const audit = await Audit.findById(req.params.id)
-      .populate("customerId", "companyName code contactPerson email")
-      .populate("siteId", "siteName siteCode address city state")
-      .populate("checklistId", "name standard description items")
-      .populate("auditorId", "name email phone specialization certifications experienceYears qualification auditorIdCode")
-      .populate("reviewerId", "name email phone");
+    const audit = await dbService.getAuditById(req.params.id);
       
     if (!audit) {
       return res.status(404).json({ message: "Audit not found" });
     }
     
     // Access control for customer
-    if (req.user.role === "customer" && audit.customerId?._id.toString() !== req.user.customerId?.toString()) {
+    const custId = audit.customerId?._id || audit.customerId?.id || audit.customerId;
+    const userCustId = req.user.customerId?._id || req.user.customerId;
+    if (req.user.role === "customer" && custId?.toString() !== userCustId?.toString()) {
       return res.status(403).json({ message: "Not authorized to access this audit report" });
     }
+
+    const visibleAudit = req.user.role === "customer"
+      ? sanitizeCustomerAudit(audit)
+      : audit;
     
     res.status(200).json({
       success: true,
-      audit
+      audit: visibleAudit,
     });
   } catch (error) {
     console.error("Get audit error:", error.message);
@@ -86,47 +80,50 @@ export const createAudit = async (req, res) => {
     
     let targetCustId = customerId;
     if (!targetCustId) {
-      let cust = await Customer.findOne();
-      if (!cust) {
-        cust = await Customer.create({
+      const customers = await dbService.getCustomers();
+      if (customers.length > 0) {
+        targetCustId = customers[0]._id || customers[0].id;
+      } else {
+        const cust = await dbService.createCustomer({
           companyName: "FoodChain Standard Client",
           code: "FCSC",
           contactPerson: "QA Desk",
           email: "client@foodchainaudithub.com",
-          isActive: true
+          isActive: true,
         });
+        targetCustId = cust._id || cust.id;
       }
-      targetCustId = cust._id;
     }
 
     let targetSiteId = siteId;
     if (!targetSiteId) {
-      let site = await Site.findOne({ customerId: targetCustId });
-      if (!site) {
-        site = await Site.create({
+      const sites = await dbService.getSites(targetCustId);
+      if (sites.length > 0) {
+        targetSiteId = sites[0]._id || sites[0].id;
+      } else {
+        const site = await dbService.createSite({
           customerId: targetCustId,
           siteName: "Central Processing Facility",
           siteCode: "CPF-01",
           address: "100 Quality Way, Industrial Zone",
           city: "Metropolis",
           state: "State HQ",
-          isActive: true
+          isActive: true,
         });
+        targetSiteId = site._id || site.id;
       }
-      targetSiteId = site._id;
     }
 
     const scheduledDateVal = scheduledDate || new Date();
     
-    // Generate a unique 8-character audit reference
+    // Unique audit ref
     const refPrefix = standard ? standard.substring(0, 4).toUpperCase() : "AUD";
     const randNum = Math.floor(1000 + Math.random() * 9000);
     const auditRef = `${refPrefix}-${randNum}`;
     
-    // Set auditorId from body if provided, or from logged-in user if auditor
     let auditorId = bodyAuditorId || null;
     if (!auditorId && req.user.role === "auditor") {
-      auditorId = req.user._id;
+      auditorId = req.user._id || req.user.id;
     }
 
     let answers = [];
@@ -134,24 +131,24 @@ export const createAudit = async (req, res) => {
     let linkedChecklistId = null;
 
     if (checklistId) {
-      const checklist = await Checklist.findById(checklistId);
+      const checklist = await dbService.getChecklistById(checklistId);
       if (checklist && checklist.items && checklist.items.length > 0) {
-        linkedChecklistId = checklist._id;
+        linkedChecklistId = checklist._id || checklist.id;
         status = "IN_PROGRESS";
-        answers = checklist.items.map(item => ({
-          itemId: item._id?.toString() || Math.random().toString(36).substring(7),
+        answers = checklist.items.map((item, idx) => ({
+          itemId: item._id?.toString() || item.id?.toString() || String(idx + 1),
           question: item.question,
           category: item.category || "General",
           score: 10,
           maxScore: item.maxScore || 10,
           comment: "",
           severity: "None",
-          evidence: ""
+          evidence: "",
         }));
       }
     }
     
-    const audit = await Audit.create({
+    const audit = await dbService.createAudit({
       auditRef,
       customerId: targetCustId,
       siteId: targetSiteId,
@@ -161,20 +158,13 @@ export const createAudit = async (req, res) => {
       status,
       checklistId: linkedChecklistId,
       answers,
-      notes
+      notes,
     });
-
-    const populatedAudit = await Audit.findById(audit._id)
-      .populate("customerId", "companyName code contactPerson email")
-      .populate("siteId", "siteName siteCode address city state")
-      .populate("checklistId", "name standard description")
-      .populate("auditorId", "name email phone specialization certifications experienceYears qualification auditorIdCode")
-      .populate("reviewerId", "name email phone");
     
     res.status(201).json({
       success: true,
       message: "Audit scheduled successfully",
-      audit: populatedAudit
+      audit,
     });
   } catch (error) {
     console.error("Create audit error:", error.message);
@@ -188,33 +178,27 @@ export const updateAudit = async (req, res) => {
   try {
     const { customerId, siteId, auditorId, reviewerId, standard, scheduledDate, status, notes } = req.body;
     
-    const audit = await Audit.findById(req.params.id);
-    if (!audit) {
+    const existing = await dbService.getAuditById(req.params.id);
+    if (!existing) {
       return res.status(404).json({ message: "Audit not found" });
     }
     
-    if (customerId) audit.customerId = customerId;
-    if (siteId) audit.siteId = siteId;
-    if (auditorId !== undefined) audit.auditorId = auditorId || null;
-    if (reviewerId !== undefined) audit.reviewerId = reviewerId || null;
-    if (standard) audit.standard = standard;
-    if (scheduledDate) audit.scheduledDate = scheduledDate;
-    if (status) audit.status = status;
-    if (notes !== undefined) audit.notes = notes;
+    const updates = {};
+    if (customerId) updates.customerId = customerId;
+    if (siteId) updates.siteId = siteId;
+    if (auditorId !== undefined) updates.auditorId = auditorId || null;
+    if (reviewerId !== undefined) updates.reviewerId = reviewerId || null;
+    if (standard) updates.standard = standard;
+    if (scheduledDate) updates.scheduledDate = scheduledDate;
+    if (status) updates.status = status;
+    if (notes !== undefined) updates.notes = notes;
     
-    await audit.save();
-
-    const updatedAudit = await Audit.findById(audit._id)
-      .populate("customerId", "companyName code contactPerson email")
-      .populate("siteId", "siteName siteCode address city state")
-      .populate("checklistId", "name standard description")
-      .populate("auditorId", "name email phone specialization certifications experienceYears qualification auditorIdCode")
-      .populate("reviewerId", "name email phone");
+    const updatedAudit = await dbService.updateAudit(req.params.id, updates);
 
     res.status(200).json({
       success: true,
       message: "Audit updated successfully",
-      audit: updatedAudit
+      audit: updatedAudit,
     });
   } catch (error) {
     console.error("Update audit error:", error.message);
@@ -232,39 +216,47 @@ export const startAuditChecklist = async (req, res) => {
       return res.status(400).json({ message: "Please select a checklist to start" });
     }
     
-    const audit = await Audit.findById(req.params.id);
+    const audit = await dbService.getAuditById(req.params.id);
     if (!audit) {
       return res.status(404).json({ message: "Audit not found" });
     }
+    const currentAuditorId = (req.user._id || req.user.id).toString();
+    const assignedAuditorId = audit.auditorId?._id || audit.auditorId?.id || audit.auditorId;
+    if (assignedAuditorId && assignedAuditorId.toString() !== currentAuditorId) {
+      return res.status(403).json({ message: "This audit is assigned to another auditor" });
+    }
+    if (!["SCHEDULED", "IN_PROGRESS"].includes(audit.status)) {
+      return res.status(409).json({ message: "This audit can no longer be started" });
+    }
     
-    const checklist = await Checklist.findById(checklistId);
+    const checklist = await dbService.getChecklistById(checklistId);
     if (!checklist) {
       return res.status(404).json({ message: "Selected checklist not found" });
     }
     
     // Copy checklist items to answers
-    const answers = checklist.items.map(item => ({
-      itemId: item._id?.toString() || Math.random().toString(36).substring(7),
+    const answers = (checklist.items || []).map((item, idx) => ({
+      itemId: item._id?.toString() || item.id?.toString() || String(idx + 1),
       question: item.question,
       category: item.category || "General",
       score: 10,  // start compliant
       maxScore: item.maxScore || 10,
       comment: "",
       severity: "None",
-      evidence: ""
+      evidence: "",
     }));
     
-    audit.checklistId = checklistId;
-    audit.answers = answers;
-    audit.auditorId = req.user._id;
-    audit.status = "IN_PROGRESS";
-    
-    await audit.save();
+    const updated = await dbService.updateAudit(req.params.id, {
+      checklistId,
+      answers,
+      auditorId: req.user._id || req.user.id,
+      status: "IN_PROGRESS",
+    });
     
     res.status(200).json({
       success: true,
       message: "Checklist started successfully",
-      audit
+      audit: updated,
     });
   } catch (error) {
     console.error("Start checklist error:", error);
@@ -282,51 +274,54 @@ export const submitAuditGrades = async (req, res) => {
       return res.status(400).json({ message: "Checklist answers are required" });
     }
     
-    const audit = await Audit.findById(req.params.id);
+    const audit = await dbService.getAuditById(req.params.id);
     if (!audit) {
       return res.status(404).json({ message: "Audit not found" });
     }
+    const currentAuditorId = (req.user._id || req.user.id).toString();
+    const assignedAuditorId = audit.auditorId?._id || audit.auditorId?.id || audit.auditorId;
+    if (assignedAuditorId?.toString() !== currentAuditorId) {
+      return res.status(403).json({ message: "This audit is assigned to another auditor" });
+    }
+    if (audit.status !== "IN_PROGRESS") {
+      return res.status(409).json({ message: "Only an in-progress audit can be submitted" });
+    }
     
-    // Calculate total score percentage
     let totalScore = 0;
     let maxPossibleScore = 0;
     
-    const processedAnswers = answers.map(ans => {
+    const processedAnswers = answers.map((ans, idx) => {
       const score = Number(ans.score) || 0;
       const maxScore = Number(ans.maxScore) || 10;
       totalScore += score;
       maxPossibleScore += maxScore;
       
       return {
-        itemId: ans.itemId,
+        itemId: ans.itemId || String(idx + 1),
         question: ans.question,
         category: ans.category || "General",
         score,
         maxScore,
         comment: ans.comment || "",
         severity: ans.severity || "None",
-        evidence: ans.evidence || ""
+        evidence: ans.evidence || "",
+        ...(ans.veraAnalysis ? { veraAnalysis: ans.veraAnalysis } : {}),
       };
     });
     
     const finalScore = maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 100;
     
-    audit.answers = processedAnswers;
-    audit.score = finalScore;
-    audit.notes = notes !== undefined ? notes : audit.notes;
-    
-    if (isDraft) {
-      audit.status = "IN_PROGRESS";
-    } else {
-      audit.status = "UNDER_REVIEW";
-    }
-    
-    await audit.save();
+    const updated = await dbService.updateAudit(req.params.id, {
+      answers: processedAnswers,
+      score: finalScore,
+      notes: notes !== undefined ? notes : audit.notes,
+      status: isDraft ? "IN_PROGRESS" : "UNDER_REVIEW",
+    });
     
     res.status(200).json({
       success: true,
       message: isDraft ? "Checklist draft saved successfully" : "Checklist submitted for Technical Review",
-      audit
+      audit: updated,
     });
   } catch (error) {
     console.error("Submit grades error:", error);
@@ -344,56 +339,61 @@ export const reviewAudit = async (req, res) => {
       return res.status(400).json({ message: "Action must be APPROVE, SEND_BACK, or REJECT" });
     }
     
-    const audit = await Audit.findById(req.params.id);
+    const audit = await dbService.getAuditById(req.params.id);
     if (!audit) {
       return res.status(404).json({ message: "Audit not found" });
     }
+    if (audit.status !== "UNDER_REVIEW") {
+      return res.status(409).json({ message: "Only audits submitted for review can receive a decision" });
+    }
     
-    audit.reviewerId = req.user._id;
-    audit.reviewerComments = reviewerComments || "";
+    const updates = {
+      reviewerId: req.user._id || req.user.id,
+      reviewerComments: reviewerComments || "",
+    };
     
-    // Optional answers update from reviewer corrections
     if (answers && Array.isArray(answers)) {
       let totalScore = 0;
       let maxPossibleScore = 0;
       
-      audit.answers = answers.map(ans => {
+      updates.answers = answers.map((ans, idx) => {
         const score = Number(ans.score) || 0;
         const maxScore = Number(ans.maxScore) || 10;
         totalScore += score;
         maxPossibleScore += maxScore;
         
         return {
-          itemId: ans.itemId,
+          itemId: ans.itemId || String(idx + 1),
           question: ans.question,
           category: ans.category || "General",
           score,
           maxScore,
           comment: ans.comment || "",
           severity: ans.severity || "None",
-          evidence: ans.evidence || ""
+          evidence: ans.evidence || "",
+          ...(ans.veraAnalysis ? { veraAnalysis: ans.veraAnalysis } : {}),
         };
       });
       
-      audit.score = maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 100;
+      updates.score = maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 100;
     }
     
     if (action === "APPROVE") {
-      audit.status = "APPROVED";
-      audit.completedDate = new Date();
+      updates.status = "APPROVED";
+      updates.completedDate = new Date();
     } else if (action === "SEND_BACK") {
-      audit.status = "IN_PROGRESS"; // Return to auditor's field task index
+      updates.status = "IN_PROGRESS";
     } else if (action === "REJECT") {
-      audit.status = "REJECTED";
-      audit.completedDate = new Date();
+      updates.status = "REJECTED";
+      updates.completedDate = new Date();
     }
     
-    await audit.save();
+    const updated = await dbService.updateAudit(req.params.id, updates);
     
     res.status(200).json({
       success: true,
-      message: `Audit successfully updated to ${audit.status}`,
-      audit
+      message: `Audit successfully updated to ${updated.status}`,
+      audit: updated,
     });
   } catch (error) {
     console.error("Review audit error:", error);

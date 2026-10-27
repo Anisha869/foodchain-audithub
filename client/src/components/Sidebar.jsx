@@ -19,6 +19,9 @@ const NAV_BY_ROLE = {
   admin: [
     { to: "/admin/dashboard", label: "Executive Dashboard", icon: LayoutDashboard },
   ],
+  planner: [
+    { to: "/admin/dashboard", label: "Audit Planning Dashboard", icon: LayoutDashboard },
+  ],
   auditor: [
     { to: "/auditor/dashboard", label: "Field Audit Execution", icon: ClipboardList },
   ],
@@ -108,7 +111,7 @@ const Sidebar = ({ role, open, onClose }) => {
               <span>System Status</span>
               <span className="text-emerald-950 text-[10px] bg-emerald-200 border border-emerald-300 px-2 py-0.5 rounded-full">Operational</span>
             </div>
-            <p className="text-[11px] text-emerald-300">MongoDB Atlas Live Sync</p>
+            <p className="text-[11px] text-emerald-300">Supabase database</p>
           </div>
         </div>
       </aside>
@@ -117,4 +120,3 @@ const Sidebar = ({ role, open, onClose }) => {
 };
 
 export default Sidebar;
-

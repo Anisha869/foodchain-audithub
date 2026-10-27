@@ -1,5 +1,4 @@
-import Checklist from "../models/Checklist.js";
-import Customer from "../models/Customer.js";
+import dbService from "../services/dbService.js";
 import { parseChecklistFile } from "../utils/fileParser.js";
 
 // @route   POST /api/checklists/upload
@@ -19,19 +18,7 @@ export const uploadChecklist = async (req, res) => {
     // Auto-resolve customerId if missing or guest user
     let customerId = req.user.customerId;
     if (req.user.role === "customer" && !customerId) {
-      let anyCust = await Customer.findOne();
-      if (!anyCust) {
-        anyCust = await Customer.create({
-          companyName: "FoodChain Standard Client",
-          code: "FCSC",
-          contactPerson: req.user.name,
-          email: req.user.email,
-          isActive: true
-        });
-      }
-      customerId = anyCust._id;
-      req.user.customerId = customerId;
-      await req.user.save();
+      return res.status(400).json({ message: "This account is not linked to a customer facility. Contact an administrator." });
     }
     
     // Parse items using utility
@@ -41,22 +28,22 @@ export const uploadChecklist = async (req, res) => {
       name
     );
     
-    const checklist = await Checklist.create({
+    const checklist = await dbService.createChecklist({
       name,
       standard: standard || "FSSAI",
       description: description || `Uploaded via file: ${req.file.originalname}`,
       items: parsedItems,
       customerId: customerId || null,
-      uploadedBy: req.user._id,
+      uploadedBy: req.user._id || req.user.id,
       fileName: req.file.originalname,
       fileSize: req.file.size,
-      isActive: true
+      isActive: true,
     });
     
     res.status(201).json({
       success: true,
       message: `Successfully uploaded checklist with ${parsedItems.length} parsed items`,
-      checklist
+      checklist,
     });
   } catch (error) {
     console.error("Checklist upload error:", error);
@@ -74,27 +61,19 @@ export const getChecklists = async (req, res) => {
     if (req.user.role === "customer") {
       let customerId = req.user.customerId;
       
-      // Auto-assign default customer if they don't have one
       if (!customerId) {
-        const anyCust = await Customer.findOne();
-        if (anyCust) {
-          customerId = anyCust._id;
-          req.user.customerId = customerId;
-          await req.user.save();
-        }
+        return res.status(400).json({ message: "This account is not linked to a customer facility. Contact an administrator." });
       }
       
       filter.customerId = customerId;
     }
     
-    const checklists = await Checklist.find(filter)
-      .populate("customerId", "companyName code")
-      .sort({ createdAt: -1 });
+    const checklists = await dbService.getChecklists(filter);
       
     res.status(200).json({
       success: true,
       count: checklists.length,
-      checklists
+      checklists,
     });
   } catch (error) {
     console.error("Get checklists error:", error.message);
@@ -106,19 +85,20 @@ export const getChecklists = async (req, res) => {
 // @access  Private
 export const getChecklistById = async (req, res) => {
   try {
-    const checklist = await Checklist.findById(req.params.id).populate("customerId", "companyName code");
+    const checklist = await dbService.getChecklistById(req.params.id);
     if (!checklist) {
       return res.status(404).json({ message: "Checklist not found" });
     }
     
     // Access validation for customer role
-    if (req.user.role === "customer" && checklist.customerId && checklist.customerId.toString() !== req.user.customerId?.toString()) {
+    const custId = checklist.customerId?._id || checklist.customerId;
+    if (req.user.role === "customer" && (!custId || custId.toString() !== req.user.customerId?.toString())) {
       return res.status(403).json({ message: "Unauthorized access to this checklist" });
     }
     
     res.status(200).json({
       success: true,
-      checklist
+      checklist,
     });
   } catch (error) {
     console.error("Get checklist error:", error.message);
@@ -130,21 +110,23 @@ export const getChecklistById = async (req, res) => {
 // @access  Private (Customer, Admin)
 export const deleteChecklist = async (req, res) => {
   try {
-    const checklist = await Checklist.findById(req.params.id);
+    const checklist = await dbService.getChecklistById(req.params.id);
     if (!checklist) {
       return res.status(404).json({ message: "Checklist not found" });
     }
     
     // Validate owner
-    if (req.user.role === "customer" && checklist.uploadedBy?.toString() !== req.user._id.toString()) {
+    const uId = checklist.uploadedBy?._id || checklist.uploadedBy || checklist.uploaded_by;
+    const currentUserId = req.user._id || req.user.id;
+    if (req.user.role === "customer" && uId?.toString() !== currentUserId.toString()) {
       return res.status(403).json({ message: "Not authorized to delete this checklist" });
     }
     
-    await Checklist.deleteOne({ _id: req.params.id });
+    await dbService.deleteChecklist(req.params.id);
     
     res.status(200).json({
       success: true,
-      message: "Checklist deleted successfully"
+      message: "Checklist deleted successfully",
     });
   } catch (error) {
     console.error("Delete checklist error:", error.message);

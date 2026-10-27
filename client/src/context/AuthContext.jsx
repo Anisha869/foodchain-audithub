@@ -49,11 +49,11 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
-    // Check if backend + MongoDB Atlas is reachable
+    // Check whether the API is reachable, regardless of the backing store.
     const checkBackend = async () => {
       try {
         const { data } = await api.get("/health");
-        setIsBackendConnected(data.database === "connected");
+        setIsBackendConnected(data.status === "ok");
       } catch {
         setIsBackendConnected(false);
       }
@@ -72,17 +72,27 @@ export const AuthProvider = ({ children }) => {
     return data.user;
   };
 
-  const signup = async ({ name, email, password, role, phone }) => {
+  const updateCurrentUser = (updatedUser) => {
+    setUser(updatedUser);
+    localStorage.setItem("fah_user", JSON.stringify(updatedUser));
+  };
+
+  const signup = async ({ name, companyName, email, password, role, phone, setupToken }) => {
     const safeRole = ALLOWED_ROLES.includes(role) ? role : "customer";
-    const { data } = await api.post(`/auth/signup/${safeRole}`, {
+    const endpoint = safeRole === "admin"
+      ? "/auth/bootstrap-admin"
+      : `/auth/signup/${safeRole}`;
+    const { data } = await api.post(endpoint, {
       name,
+      companyName,
       email,
       password,
       role: safeRole,
       phone,
+      setupToken,
     });
 
-    return data.user;
+    return data;
   };
 
   const logout = () => {
@@ -95,7 +105,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, signup, logout, isAuthenticated: !!user, homeRouteForRole, isBackendConnected }}
+      value={{ user, loading, login, signup, logout, updateCurrentUser, isAuthenticated: !!user, homeRouteForRole, isBackendConnected }}
     >
       {children}
     </AuthContext.Provider>

@@ -8,54 +8,20 @@ import {
   Lock,
   Mail,
   UserCheck,
-  Sparkles,
   Building2,
   ClipboardList,
   FileCheck2,
   ArrowRight,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
+import api from "../services/api.js";
 
-const DEMO_ROLES = [
-  {
-    role: "admin",
-    name: "Admin / Planner",
-    email: "admin@foodchainaudithub.com",
-    pass: "Admin@12345",
-    icon: ShieldCheck,
-    desc: "Full management of users, sites, schedules & standards",
-    color: "bg-teal-50 border-teal-200 text-teal-700",
-    badge: "bg-teal-100 text-teal-700 border-teal-200"
-  },
-  {
-    role: "auditor",
-    name: "Field Auditor",
-    email: "auditor@foodchainaudithub.com",
-    pass: "Auditor@123",
-    icon: ClipboardList,
-    desc: "Mobile checklist execution, evidence photos & findings",
-    color: "bg-sky-50 border-sky-200 text-sky-700",
-    badge: "bg-sky-100 text-sky-700 border-sky-200"
-  },
-  {
-    role: "reviewer",
-    name: "Technical Reviewer",
-    email: "reviewer@foodchainaudithub.com",
-    pass: "Reviewer@123",
-    icon: FileCheck2,
-    desc: "Review submitted audits, score verification & sign-off",
-    color: "bg-violet-50 border-violet-200 text-violet-700",
-    badge: "bg-violet-100 text-violet-700 border-violet-200"
-  },
-  {
-    role: "customer",
-    name: "Customer / Facility",
-    email: "customer@foodchainaudithub.com",
-    pass: "Customer@123",
-    icon: Building2,
-    desc: "View audit reports, CAPA responses & compliance trends",
-    color: "bg-amber-50 border-amber-200 text-amber-700",
-  }
+const SIGNUP_ROLES = [
+  { role: "customer", label: "Customer" },
+  { role: "auditor", label: "Auditor" },
+  { role: "planner", label: "Planner" },
+  { role: "reviewer", label: "Reviewer" },
+  { role: "admin", label: "First admin" },
 ];
 
 const Login = () => {
@@ -63,9 +29,8 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [activeTab, setActiveTab] = useState("signin");
-  const [email, setEmail] = useState("admin@foodchainaudithub.com");
-  const [password, setPassword] = useState("Admin@12345");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -74,6 +39,7 @@ const Login = () => {
   const params = new URLSearchParams(location.search);
   const signupSuccess = params.get("signup") === "success";
   const signedRole = params.get("role");
+  const signupPending = params.get("pending") === "true";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -91,24 +57,12 @@ const Login = () => {
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(
-        err.response?.data?.message || err.message || "Login failed. Please verify credentials."
+        err.response?.data?.message || (
+          err.code === "ERR_NETWORK"
+            ? `Cannot reach the backend API at ${api.defaults.baseURL}. Check that the API is running and connected to Supabase.`
+            : err.message || "Login failed. Please verify credentials."
+        )
       );
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleQuickLogin = async (demoEmail, demoPass) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setError("");
-    setSubmitting(true);
-    try {
-      const user = await login(demoEmail, demoPass);
-      const redirectTo = location.state?.from?.pathname || homeRouteForRole(user.role);
-      navigate(redirectTo, { replace: true });
-    } catch (err) {
-      setError(err.response?.data?.message || "Quick demo login failed. Standard sign in is ready.");
     } finally {
       setSubmitting(false);
     }
@@ -207,35 +161,18 @@ const Login = () => {
                   <h2 className="mt-3 text-3xl font-extrabold text-white">Sign in to AuditHub</h2>
                 </div>
                 <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-xs font-semibold text-white border border-white/20">
-                  <span className={`h-2 w-2 rounded-full ${isBackendConnected ? "bg-emerald-300 animate-pulse" : "bg-emerald-200"}`} />
-                  {isBackendConnected === true ? "Atlas live" : isBackendConnected === false ? "Standalone Demo" : "Netlify live"}
+                  <span className={`h-2 w-2 rounded-full ${isBackendConnected === true ? "bg-emerald-300 animate-pulse" : "bg-amber-300"}`} />
+                  {isBackendConnected === true ? "API online" : isBackendConnected === false ? "API unavailable" : "Checking API"}
                 </div>
               </div>
             </div>
 
             <div className="px-8 py-8 sm:px-10 bg-slate-50 border-t border-slate-200">
-              <div className="flex bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 mb-8">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("signin")}
-                  className={`flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${activeTab === 'signin' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-300 hover:text-white'}`}
-                >
-                  <UserCheck size={18} />
-                  Login
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("quick-demo")}
-                  className={`flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${activeTab === 'quick-demo' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-300 hover:text-white'}`}
-                >
-                  <Sparkles size={18} />
-                  1-Click Demo Logins
-                </button>
-              </div>
-
               {signupSuccess && (
                 <div className="mb-6 rounded-3xl border border-emerald-600 bg-emerald-50 p-4 text-sm text-emerald-900">
-                  {`Account for "${signedRole || 'user'}" created successfully. Please sign in below.`}
+                  {signupPending
+                    ? `Your ${signedRole || "staff"} signup request was saved. An administrator must approve it before you can sign in.`
+                    : `Account for "${signedRole || "user"}" created successfully. Please sign in below.`}
                 </div>
               )}
 
@@ -245,8 +182,6 @@ const Login = () => {
                 </div>
               )}
 
-              {activeTab === "signin" && (
-                <>
                   <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="space-y-2">
                       <label className="block text-sm font-semibold text-slate-800">Email Address</label>
@@ -259,7 +194,7 @@ const Login = () => {
                           required
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          placeholder="admin@foodchainaudithub.com"
+                          placeholder="name@example.com"
                           className="w-full rounded-3xl border border-slate-300 bg-white py-3.5 pl-14 pr-4 text-slate-900 placeholder-slate-500 outline-none transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 shadow-sm"
                         />
                       </div>
@@ -312,48 +247,15 @@ const Login = () => {
                   </form>
 
                   <div className="mt-4 text-center text-sm text-slate-600">
-                    <p className="mb-2">Don't have an account? Create one for a specific module:</p>
+                    <p className="mb-2">Create a role-specific account</p>
                     <div className="flex items-center justify-center gap-2 flex-wrap">
-                      <Link to="/signup/admin" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs hover:border-emerald-500">Admin</Link>
-                      <Link to="/signup/planner" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs hover:border-emerald-500">Planner</Link>
-                      <Link to="/signup/auditor" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs hover:border-emerald-500">Auditor</Link>
-                      <Link to="/signup/reviewer" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs hover:border-emerald-500">Reviewer</Link>
-                      <Link to="/signup/customer" className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs hover:border-emerald-500">Customer</Link>
+                      {SIGNUP_ROLES.map(({ role, label }) => (
+                        <Link key={role} to={`/signup/${role}`} className="px-3 py-2 rounded-full border bg-white text-slate-700 text-xs hover:border-emerald-500">
+                          {label}
+                        </Link>
+                      ))}
                     </div>
                   </div>
-                </>
-              )}
-
-              {activeTab === "quick-demo" && (
-                <div className="space-y-5">
-                  <p className="text-sm text-slate-600">Click any role below for 1-click instant login into that module's live dashboard:</p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {DEMO_ROLES.map(({ role, name, email: demoEmail, pass: demoPass, icon: Icon, desc, color, badge }) => (
-                      <button
-                        key={role}
-                        type="button"
-                        disabled={submitting}
-                        onClick={() => handleQuickLogin(demoEmail, demoPass)}
-                        className={`rounded-3xl border px-4 py-5 text-left transition-all duration-200 ${color} shadow-sm hover:-translate-y-0.5 hover:shadow-md cursor-pointer`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/90 text-slate-950 shadow-sm">
-                              <Icon size={20} />
-                            </div>
-                            <div>
-                              <p className="font-semibold text-slate-950">{name}</p>
-                              <p className="text-xs text-slate-500">{role}</p>
-                            </div>
-                          </div>
-                          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${badge}`}>1-Click Login</span>
-                        </div>
-                        <p className="mt-3 text-xs text-slate-600">{desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -363,4 +265,3 @@ const Login = () => {
 };
 
 export default Login;
-

@@ -58,7 +58,7 @@ const CustomerDashboard = () => {
       setErrorMessage("");
     } catch (err) {
       console.error("Error loading dashboard data:", err);
-      setErrorMessage("Could not load dashboard data from server. Please try again.");
+      setErrorMessage(err.response?.data?.message || "Could not load dashboard data from server.");
     } finally {
       setLoading(false);
     }
@@ -132,7 +132,7 @@ const CustomerDashboard = () => {
       loadDashboardData();
     } catch (err) {
       console.error("Delete error:", err);
-      setErrorMessage("Could not delete checklist. Please review connection.");
+      setErrorMessage(err.response?.data?.message || "Could not delete checklist.");
     }
   };
 
@@ -590,7 +590,7 @@ const CustomerDashboard = () => {
                 <div className="space-y-1">
                   <span className="text-[10px] uppercase font-bold text-slate-500 block">Overall Compliance Score</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-black text-indigo-700">{selectedAudit.score}%</span>
+                    <span className="text-2xl font-black text-indigo-700">{selectedAudit.score != null ? `${selectedAudit.score}%` : "Pending"}</span>
                     <span className="text-xs text-slate-550">
                       ({selectedAudit.answers?.reduce((acc, c) => acc + c.score, 0)} / {selectedAudit.answers?.reduce((acc, c) => acc + c.maxScore, 0)} points)
                     </span>

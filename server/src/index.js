@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import dotenv from "dotenv";
-import mongoose from "mongoose";
+import { randomBytes } from "crypto";
 
 import connectDB from "./config/db.js";
 import healthRoutes from "./routes/health.routes.js";
@@ -11,8 +11,18 @@ import userRoutes from "./routes/user.routes.js";
 import customerRoutes from "./routes/customer.routes.js";
 import checklistRoutes from "./routes/checklist.routes.js";
 import auditRoutes from "./routes/audit.routes.js";
+import ragRoutes from "./routes/rag.routes.js";
 
 dotenv.config();
+
+if (!process.env.JWT_SECRET) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET must be configured in production");
+  }
+
+  process.env.JWT_SECRET = randomBytes(32).toString("hex");
+  console.warn("JWT_SECRET is not configured; using an ephemeral development secret.");
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -54,9 +64,14 @@ app.use("/api/users", userRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/checklists", checklistRoutes);
 app.use("/api/audits", auditRoutes);
+app.use("/api/rag", ragRoutes);
 
 app.get("/", (req, res) => {
-  res.json({ message: "FoodChain AuditHub API is running" });
+  res.json({
+    message: "FoodChain AuditHub API is running",
+    database: "Supabase",
+    aiEngine: "VERA Offline RAG ML Engine",
+  });
 });
 
 // 404 handler
@@ -72,7 +87,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server after attempting DB connection so startup logs are ordered
+// Start server
 async function startServer() {
   try {
     await connectDB();
@@ -85,12 +100,12 @@ async function startServer() {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
   });
 
-  server.on('error', (err) => {
-    if (err && err.code === 'EADDRINUSE') {
+  server.on("error", (err) => {
+    if (err && err.code === "EADDRINUSE") {
       console.error(`Port ${PORT} is already in use. Please free the port or set PORT env variable to a different value.`);
       process.exit(1);
     } else {
-      console.error('Server error:', err);
+      console.error("Server error:", err);
       process.exit(1);
     }
   });
@@ -102,31 +117,26 @@ async function startServer() {
         await new Promise((resolve, reject) => {
           server.close((err) => (err ? reject(err) : resolve()));
         });
-        console.log('HTTP server closed');
-      }
-
-      if (mongoose && mongoose.connection && mongoose.connection.readyState === 1) {
-        await mongoose.connection.close(false);
-        console.log('MongoDB connection closed');
+        console.log("HTTP server closed");
       }
     } catch (err) {
-      console.error('Error during graceful shutdown:', err);
+      console.error("Error during graceful shutdown:", err);
     } finally {
       process.exit(0);
     }
   };
 
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 
-  process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
-    gracefulShutdown('uncaughtException');
+  process.on("uncaughtException", (err) => {
+    console.error("Uncaught Exception:", err);
+    gracefulShutdown("uncaughtException");
   });
 
-  process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    gracefulShutdown('unhandledRejection');
+  process.on("unhandledRejection", (reason, promise) => {
+    console.error("Unhandled Rejection at:", promise, "reason:", reason);
+    gracefulShutdown("unhandledRejection");
   });
 }
 

@@ -24,10 +24,13 @@ const AdminDashboard = () => {
   const { user } = useAuth();
   const [audits, setAudits] = useState([]);
   const [checklists, setChecklists] = useState([]);
+  const [pendingUsers, setPendingUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [approvingUserId, setApprovingUserId] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [errorMsg, setErrorMsg] = useState("");
+  const [approvalError, setApprovalError] = useState("");
 
   const fetchData = async () => {
     try {
@@ -37,6 +40,19 @@ const AdminDashboard = () => {
 
       const checklistsRes = await api.get("/checklists");
       setChecklists(checklistsRes.data.checklists || []);
+
+      if (user?.role === "admin") {
+        try {
+          const pendingRes = await api.get("/users", { params: { approvalStatus: "pending" } });
+          setPendingUsers((pendingRes.data.users || []).filter((pendingUser) =>
+            ["auditor", "planner", "reviewer"].includes(pendingUser.role)
+          ));
+          setApprovalError("");
+        } catch (err) {
+          console.error("Pending staff signup fetch error:", err);
+          setApprovalError("Could not load pending staff signup requests.");
+        }
+      }
     } catch (err) {
       console.error("Admin fetch error:", err);
       setErrorMsg("Failed to load audit records.");
@@ -48,6 +64,20 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const approveStaffSignup = async (pendingUser) => {
+    setApprovingUserId(pendingUser._id || pendingUser.id);
+    setApprovalError("");
+    try {
+      await api.patch(`/users/${pendingUser._id || pendingUser.id}/approve`);
+      setPendingUsers((current) => current.filter((item) => item.id !== pendingUser.id && item._id !== pendingUser._id));
+    } catch (err) {
+      console.error("Staff signup approval error:", err);
+      setApprovalError(err.response?.data?.message || "Could not approve this staff signup.");
+    } finally {
+      setApprovingUserId("");
+    }
+  };
 
   const filteredAudits = audits.filter(audit => {
     const custName = audit.customerId?.companyName || "";
@@ -93,7 +123,7 @@ const AdminDashboard = () => {
             Audit System Control Center
           </span>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Administrator: {user?.name}
+            {user?.role === "planner" ? "Audit Planner" : "Administrator"}: {user?.name}
           </h1>
           <p className="text-sm text-slate-600 max-w-2xl">
             Live overview of all customer compliance checklists, auditor field execution progress, and technical signoffs across the enterprise.
@@ -106,6 +136,47 @@ const AdminDashboard = () => {
           </div>
         </div>
       </div>
+
+      {user?.role === "admin" && (
+        <section className="rounded-3xl border border-amber-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Pending staff approvals</h2>
+              <p className="text-xs text-slate-500">Auditor, planner, and reviewer accounts cannot sign in until approved.</p>
+            </div>
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">{pendingUsers.length} pending</span>
+          </div>
+
+          {approvalError && <p role="alert" className="mb-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{approvalError}</p>}
+          {pendingUsers.length === 0 ? (
+            <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">There are no pending staff signup requests.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {pendingUsers.map((pendingUser) => {
+                const pendingId = pendingUser._id || pendingUser.id;
+                return (
+                  <li key={pendingId} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="font-semibold text-slate-900">{pendingUser.name}</p>
+                      <p className="text-sm text-slate-600">{pendingUser.email}</p>
+                      <p className="mt-1 text-xs capitalize text-slate-500">{pendingUser.role}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => approveStaffSignup(pendingUser)}
+                      disabled={approvingUserId === pendingId}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      <Check size={16} />
+                      {approvingUserId === pendingId ? "Approving..." : "Approve account"}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
@@ -211,7 +282,7 @@ const AdminDashboard = () => {
                       {audit.answers?.length || 0} Points
                     </td>
                     <td className="py-4 px-4 text-right font-black text-slate-900 text-sm">
-                      {audit.score !== null ? `${audit.score}%` : "—"}
+                      {audit.score != null ? `${audit.score}%` : "—"}
                     </td>
                   </tr>
                 ))

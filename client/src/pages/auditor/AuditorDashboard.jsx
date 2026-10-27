@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 
 const AuditorDashboard = () => {
-  const { user } = useAuth();
+  const { user, updateCurrentUser } = useAuth();
   
   // State lists
   const [audits, setAudits] = useState([]);
@@ -54,6 +54,9 @@ const AuditorDashboard = () => {
   const [selectedChecklistId, setSelectedChecklistId] = useState("");
   const [checklistItems, setChecklistItems] = useState([]); // answers inside the audit
   const [notes, setNotes] = useState("");
+  const [analysisEngine, setAnalysisEngine] = useState("compare");
+  const [analysisData, setAnalysisData] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
 
   // Preview Checklist Modal state
   const [previewChecklist, setPreviewChecklist] = useState(null);
@@ -94,8 +97,8 @@ const AuditorDashboard = () => {
       setSavingProfile(true);
       setErrorMsg("");
       const { data } = await api.put("/auth/profile", profileForm);
-      localStorage.setItem("fah_user", JSON.stringify(data.user));
-      setSuccessMsg("Auditor details updated & saved to MongoDB successfully!");
+      updateCurrentUser(data.user);
+      setSuccessMsg("Auditor details updated successfully.");
       setShowProfileModal(false);
       fetchData();
     } catch (err) {
@@ -126,7 +129,7 @@ const AuditorDashboard = () => {
       setErrorMsg("");
     } catch (err) {
       console.error("Error loading auditor data:", err);
-      setErrorMsg("Failed to load audit resources from server.");
+      setErrorMsg(err.response?.data?.message || "Failed to load audit resources from server.");
     } finally {
       setLoading(false);
     }
@@ -148,6 +151,7 @@ const AuditorDashboard = () => {
         setSites(data.sites || []);
       } catch (err) {
         console.error("Error loading sites:", err);
+        setErrorMsg(err.response?.data?.message || "Failed to load facility sites.");
       }
     };
     loadSites();
@@ -187,7 +191,7 @@ const AuditorDashboard = () => {
       }
     } catch (err) {
       console.error(err);
-      setErrorMsg("Failed to create audit schedule.");
+      setErrorMsg(err.response?.data?.message || "Failed to create audit schedule.");
     } finally {
       setScheduleLoading(false);
     }
@@ -214,7 +218,7 @@ const AuditorDashboard = () => {
       startAuditExecution(data.audit);
     } catch (err) {
       console.error("Launch audit error:", err);
-      setErrorMsg("Could not launch audit execution session. Please try again.");
+      setErrorMsg(err.response?.data?.message || "Could not launch audit execution session.");
     } finally {
       setLoading(false);
     }
@@ -223,6 +227,7 @@ const AuditorDashboard = () => {
   // Launch inspection view for an active audit
   const startAuditExecution = (audit) => {
     setActiveAudit(audit);
+    setAnalysisData(null);
     setErrorMsg("");
     setSuccessMsg("");
     
@@ -234,6 +239,34 @@ const AuditorDashboard = () => {
       setSelectedChecklistId("");
       setChecklistItems([]);
       setNotes(audit.notes || "");
+    }
+  };
+
+  const runVeraAnalysis = async () => {
+    try {
+      setAnalysisLoading(true);
+      setErrorMsg("");
+      const { data: saved } = await api.put(`/audits/${activeAudit._id}/submit-grades`, {
+        answers: checklistItems,
+        isDraft: true,
+        notes,
+      });
+      setActiveAudit(saved.audit);
+      setChecklistItems(saved.audit.answers || checklistItems);
+      const { data } = await api.post("/rag/verify", {
+        auditId: activeAudit._id,
+        engine: analysisEngine,
+      }, { timeout: 120000 });
+      setAnalysisData(data.data);
+      if (data.audit) {
+        setActiveAudit(data.audit);
+        setChecklistItems(data.audit.answers || checklistItems);
+      }
+      setSuccessMsg("VERA advisory results saved with this audit.");
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || "VERA could not analyze this audit.");
+    } finally {
+      setAnalysisLoading(false);
     }
   };
 
@@ -255,7 +288,7 @@ const AuditorDashboard = () => {
       setErrorMsg("");
     } catch (err) {
       console.error("Link checklist error:", err);
-      setErrorMsg("Could not apply selected checklist to audit record.");
+      setErrorMsg(err.response?.data?.message || "Could not apply selected checklist to audit record.");
     } finally {
       setLoading(false);
     }
@@ -263,6 +296,7 @@ const AuditorDashboard = () => {
 
   // Quick 1-Click YES / NO / NA Compliance status handler for each point
   const handleToggleCompliance = (itemIdx, status) => {
+    setAnalysisData(null);
     const nextAnswers = [...checklistItems];
     const item = nextAnswers[itemIdx];
     const maxScore = Number(item.maxScore) || 10;
@@ -295,6 +329,7 @@ const AuditorDashboard = () => {
 
   // Handle specific field updates (score dropdown, severity, comments)
   const handleAnswerChange = (itemIdx, field, value) => {
+    setAnalysisData(null);
     const nextAnswers = [...checklistItems];
     nextAnswers[itemIdx] = {
       ...nextAnswers[itemIdx],
@@ -346,7 +381,7 @@ const AuditorDashboard = () => {
       }
     } catch (err) {
       console.error("Save audit error:", err);
-      setErrorMsg("Failed to upload compliance responses. Please check connection.");
+      setErrorMsg(err.response?.data?.message || "Failed to upload compliance responses.");
     } finally {
       setLoading(false);
     }
@@ -383,6 +418,11 @@ const AuditorDashboard = () => {
   };
 
   const stats = getLiveScoreStats();
+  const analysisResults = analysisData?.engines
+    ? Object.entries(analysisData.engines)
+    : analysisData
+      ? [[analysisData.engine || "rag", analysisData]]
+      : [];
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
@@ -467,6 +507,77 @@ const AuditorDashboard = () => {
                 <p className="text-2xl font-black text-teal-300">{stats.percent}%</p>
               </div>
             </div>
+          )}
+
+          {checklistItems.length > 0 && (
+            <section className="space-y-4 rounded-2xl border border-cyan-200 bg-cyan-50/70 p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                    <Sparkles size={18} className="text-cyan-700" /> VERA pre-review evidence check
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Advisory local NLP and offline RAG. No Ollama/LLM is configured; verify every result and add report evidence before submitting.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <select
+                    aria-label="VERA evaluation engine"
+                    value={analysisEngine}
+                    onChange={(event) => setAnalysisEngine(event.target.value)}
+                    disabled={analysisLoading}
+                    className="rounded-xl border border-cyan-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800"
+                  >
+                    <option value="nlp">Classical NLP baseline</option>
+                    <option value="rag">Offline RAG</option>
+                    <option value="okf">FSSAI knowledge-file traversal</option>
+                    <option value="compare">Compare NLP + RAG + OKF</option>
+                    <option value="nli" disabled>NLI (model not configured)</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={runVeraAnalysis}
+                    disabled={analysisLoading || !["IN_PROGRESS", "UNDER_REVIEW"].includes(activeAudit.status)}
+                    className="rounded-xl bg-cyan-700 px-4 py-2 text-xs font-bold text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {analysisLoading ? "Analyzing..." : "Run analysis"}
+                  </button>
+                </div>
+              </div>
+              {analysisData?.disagreements && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">
+                  The engines disagree on {analysisData.disagreements.length} item(s); prioritize these for human review.
+                </p>
+              )}
+              {analysisResults.map(([engineName, result]) => (
+                <div key={engineName} className="space-y-2 rounded-xl border border-cyan-100 bg-white p-3">
+                  <h4 className="text-xs font-black uppercase text-cyan-900">
+                    {engineName === "nlp"
+                      ? "Classical NLP baseline"
+                      : engineName === "okf"
+                        ? "Experimental FSSAI knowledge-file traversal"
+                        : "Offline RAG"}
+                  </h4>
+                  {result.advisory && <p className="text-[11px] text-slate-500">{result.advisory}</p>}
+                  {Object.entries(result.verdicts || {}).map(([itemId, verdict]) => (
+                    <div key={`${engineName}-${itemId}`} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-bold text-slate-900">
+                          {checklistItems.find((item) => String(item.itemId) === itemId)?.question || `Checklist item ${itemId}`}
+                        </p>
+                        <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-slate-700">
+                          {verdict.status} · {Math.round((verdict.similarity_score ?? verdict.confidence ?? 0) * 100)}% similarity
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-700">{verdict.evidence}</p>
+                      {verdict.traversal_path && (
+                        <p className="mt-1 text-[10px] text-slate-500">Knowledge path: {verdict.traversal_path.join(" → ")}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </section>
           )}
 
           {/* Checklist selector if not already linked */}
@@ -1081,7 +1192,7 @@ const AuditorDashboard = () => {
             <div className="p-5 bg-gradient-to-r from-emerald-600 to-teal-700 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <User size={20} />
-                <h3 className="font-bold text-base">Auditor Profile &amp; MongoDB Details</h3>
+                <h3 className="font-bold text-base">Auditor Profile &amp; Credentials</h3>
               </div>
               <button 
                 onClick={() => setShowProfileModal(false)}
@@ -1207,7 +1318,7 @@ const AuditorDashboard = () => {
                   className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Save size={14} />
-                  {savingProfile ? "Saving to MongoDB..." : "Save Auditor Details"}
+                  {savingProfile ? "Saving profile..." : "Save Auditor Details"}
                 </button>
               </div>
             </form>

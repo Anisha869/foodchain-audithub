@@ -1,68 +1,53 @@
-import Admin from "../models/Admin.js";
-import Planner from "../models/Planner.js";
-import Auditor from "../models/Auditor.js";
-import Reviewer from "../models/Reviewer.js";
-import CustomerUser from "../models/CustomerUser.js";
+import dbService from "../services/dbService.js";
 
 /**
- * Maps a role string to its Mongoose model.
- */
-const ROLE_MODEL_MAP = {
-  admin: Admin,
-  planner: Planner,
-  auditor: Auditor,
-  reviewer: Reviewer,
-  customer: CustomerUser,
-};
-
-/** All role models in an array (useful for cross-collection queries). */
-export const ALL_ROLE_MODELS = Object.values(ROLE_MODEL_MAP);
-
-/**
- * Get the Mongoose model for a given role string.
- * @param {string} role
- * @returns {import("mongoose").Model | undefined}
- */
-export const getModelByRole = (role) => ROLE_MODEL_MAP[role];
-
-/**
- * Find a user by email across ALL role collections (parallelized for speed).
- * Returns { user, Model } or null.
- * Selects +password so login can compare hashes.
+ * Finds a user by email using the Supabase database service.
+ * Returns { user } or null.
  */
 export const findUserByEmail = async (email) => {
-  const normalised = email.toLowerCase().trim();
-  const entries = Object.entries(ROLE_MODEL_MAP);
-
-  const results = await Promise.all(
-    entries.map(async ([role, Model]) => {
-      const user = await Model.findOne({ email: normalised }).select("+password");
-      return user ? { user, Model } : null;
-    })
-  );
-
-  return results.find((res) => res !== null) || null;
+  const user = await dbService.findUserByEmail(email);
+  return user ? { user } : null;
 };
 
 /**
- * Find a user by _id in a specific role collection.
+ * Finds a user by id and role.
  */
 export const findUserByIdAndRole = async (id, role) => {
-  const Model = ROLE_MODEL_MAP[role];
-  if (!Model) return null;
-  return Model.findById(id);
+  return await dbService.findUserByIdAndRole(id, role);
 };
 
 /**
- * Find a user by _id across ALL role collections (parallelized for speed).
+ * Finds a user by id.
  */
 export const findUserById = async (id) => {
-  const results = await Promise.all(
-    ALL_ROLE_MODELS.map(async (Model) => {
-      return await Model.findById(id);
-    })
-  );
-  return results.find((u) => u !== null) || null;
+  return await dbService.findUserById(id);
 };
 
-export default ROLE_MODEL_MAP;
+export const getModelByRole = (role) => {
+  return {
+    async create(data) {
+      return await dbService.createUser({ ...data, role });
+    },
+    async findOne(query) {
+      if (query.email) return await dbService.findUserByEmail(query.email);
+      if (query.id || query._id) return await dbService.findUserById(query.id || query._id);
+      return null;
+    },
+    async findById(id) {
+      return await dbService.findUserById(id);
+    },
+    async find(filter = {}) {
+      return await dbService.getUsers({ ...filter, role });
+    },
+  };
+};
+
+export const ALL_ROLE_MODELS = ["admin", "planner", "auditor", "reviewer", "customer"].map(getModelByRole);
+
+export default {
+  findUserByEmail,
+  findUserByIdAndRole,
+  findUserById,
+  getModelByRole,
+  ALL_ROLE_MODELS,
+};

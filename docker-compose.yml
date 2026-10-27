@@ -2,12 +2,14 @@ services:
 
   backend:
     build:
-      context: ./server
+      context: .
+      dockerfile: server/Dockerfile
     container_name: foodchain-backend
     ports:
       - "5000:5000"
     env_file:
-      - ./server/.env
+      - path: ./server/.env
+        required: false
     restart: unless-stopped
 
   frontend:

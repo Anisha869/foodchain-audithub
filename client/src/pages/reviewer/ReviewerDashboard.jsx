@@ -23,7 +23,9 @@ import {
   X,
   XCircle,
   Clock,
-  Filter
+  Filter,
+  BrainCircuit,
+  Send
 } from "lucide-react";
 
 const ReviewerDashboard = () => {
@@ -41,6 +43,13 @@ const ReviewerDashboard = () => {
   const [activeReview, setActiveReview] = useState(null);
   const [reviewAnswers, setReviewAnswers] = useState([]);
   const [reviewerComments, setReviewerComments] = useState("");
+  const [ragAnalysis, setRagAnalysis] = useState(null);
+  const [analysisEngine, setAnalysisEngine] = useState("compare");
+  const [ragQuestion, setRagQuestion] = useState("");
+  const [ragAnswer, setRagAnswer] = useState("");
+  const [ragLoading, setRagLoading] = useState(false);
+  const [ragAskLoading, setRagAskLoading] = useState(false);
+  const [ragError, setRagError] = useState("");
 
   const fetchReviews = async () => {
     try {
@@ -50,7 +59,7 @@ const ReviewerDashboard = () => {
       setReviews(data.audits || []);
     } catch (err) {
       console.error(err);
-      setErrorMsg("Failed to load technical review queue from server.");
+      setErrorMsg(err.response?.data?.message || "Failed to load technical review queue from server.");
     } finally {
       setLoading(false);
     }
@@ -65,6 +74,9 @@ const ReviewerDashboard = () => {
     setActiveReview(audit);
     setReviewAnswers(audit.answers || []);
     setReviewerComments(audit.reviewerComments || "");
+    setRagAnalysis(null);
+    setRagAnswer("");
+    setRagError("");
     setErrorMsg("");
     setSuccessMsg("");
   };
@@ -74,6 +86,10 @@ const ReviewerDashboard = () => {
     setActiveReview(null);
     setReviewAnswers([]);
     setReviewerComments("");
+    setRagAnalysis(null);
+    setRagAnswer("");
+    setRagQuestion("");
+    setRagError("");
     setErrorMsg("");
     setSuccessMsg("");
     fetchReviews();
@@ -115,6 +131,42 @@ const ReviewerDashboard = () => {
     setReviewAnswers(nextAnswers);
   };
 
+  const runRagAnalysis = async () => {
+    try {
+      setRagLoading(true);
+      setRagError("");
+      const { data } = await api.post("/rag/verify", {
+        auditId: activeReview._id,
+        engine: analysisEngine,
+      }, { timeout: 120000 });
+      setRagAnalysis(data.data);
+      setReviewAnswers(data.audit?.answers || reviewAnswers);
+    } catch (err) {
+      setRagError(err.response?.data?.message || "VERA could not analyze this audit.");
+    } finally {
+      setRagLoading(false);
+    }
+  };
+
+  const askRagQuestion = async (event) => {
+    event.preventDefault();
+    if (!ragQuestion.trim()) return;
+
+    try {
+      setRagAskLoading(true);
+      setRagError("");
+      const { data } = await api.post("/rag/ask", {
+        auditId: activeReview._id,
+        question: ragQuestion.trim(),
+      }, { timeout: 120000 });
+      setRagAnswer(data.answer);
+    } catch (err) {
+      setRagError(err.response?.data?.message || "VERA could not answer from this audit.");
+    } finally {
+      setRagAskLoading(false);
+    }
+  };
+
   // Submit action: APPROVE, SEND_BACK, REJECT
   const submitReviewAction = async (actionType) => {
     try {
@@ -134,7 +186,7 @@ const ReviewerDashboard = () => {
       }, 1200);
     } catch (err) {
       console.error(err);
-      setErrorMsg("Failed to upload technical reviewer decision.");
+      setErrorMsg(err.response?.data?.message || "Failed to submit technical reviewer decision.");
       setActionLoading(false);
     }
   };
@@ -159,6 +211,12 @@ const ReviewerDashboard = () => {
   };
 
   const liveStats = getLiveScore();
+  const canDecide = activeReview?.status === "UNDER_REVIEW";
+  const analysisResults = ragAnalysis?.engines
+    ? Object.entries(ragAnalysis.engines)
+    : ragAnalysis
+      ? [[ragAnalysis.engine || "rag", ragAnalysis]]
+      : [];
 
   // Filtered reviews list based on selected status tab
   const filteredReviews = reviews.filter(rev => {
@@ -253,6 +311,127 @@ const ReviewerDashboard = () => {
             </div>
           )}
 
+          {/* Read-only VERA audit evidence review */}
+          <section className="rounded-2xl border border-cyan-200 bg-cyan-50/70 p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                  <BrainCircuit size={18} className="text-cyan-700" />
+                  VERA evidence assistant
+                </h3>
+                <p className="mt-1 text-xs text-slate-600">
+                  Local TF-IDF baseline and offline evidence retrieval. No hosted model is used; results are saved with the audit for traceability and never replace reviewer decisions.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <select
+                  aria-label="VERA evaluation engine"
+                  value={analysisEngine}
+                  onChange={(event) => setAnalysisEngine(event.target.value)}
+                  disabled={ragLoading}
+                  className="rounded-xl border border-cyan-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800"
+                >
+                  <option value="nlp">Classical NLP baseline</option>
+                  <option value="rag">Offline RAG</option>
+                  <option value="okf">FSSAI knowledge-file traversal</option>
+                  <option value="compare">Compare NLP + RAG + OKF</option>
+                  <option value="nli" disabled>NLI (model not configured)</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={runRagAnalysis}
+                  disabled={!canDecide || ragLoading}
+                  className="rounded-xl bg-cyan-700 px-4 py-2 text-xs font-bold text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {ragLoading ? "Analyzing evidence..." : "Run selected analysis"}
+                </button>
+              </div>
+            </div>
+
+            {ragError && <p className="rounded-lg bg-rose-100 px-3 py-2 text-xs text-rose-800">{ragError}</p>}
+
+            {ragAnalysis && (
+              <div className="space-y-3">
+                {ragAnalysis.disagreements && (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">
+                    Engine disagreement: {ragAnalysis.disagreements.length} item(s) require human comparison.
+                  </p>
+                )}
+                {analysisResults.map(([engineName, result]) => (
+                  <section key={engineName} className="space-y-3 rounded-xl border border-cyan-100 bg-white p-3">
+                    <h4 className="text-xs font-black uppercase tracking-wide text-cyan-900">
+                      {engineName === "nlp"
+                        ? "Classical NLP baseline"
+                        : engineName === "okf"
+                          ? "Experimental FSSAI knowledge-file traversal"
+                          : "Offline RAG"}
+                    </h4>
+                    {result.advisory && <p className="text-[11px] text-slate-500">{result.advisory}</p>}
+                    <div className="grid gap-2 sm:grid-cols-4 text-xs">
+                      <p className="rounded-lg bg-slate-50 p-2 text-slate-700">Evaluated: <strong>{result.diagnostics?.total_evaluated ?? 0}</strong></p>
+                      <p className="rounded-lg bg-emerald-50 p-2 text-emerald-800">Met: <strong>{result.diagnostics?.total_C ?? 0}</strong></p>
+                      <p className="rounded-lg bg-amber-50 p-2 text-amber-800">Partial: <strong>{result.diagnostics?.total_PC ?? 0}</strong></p>
+                      <p className="rounded-lg bg-rose-50 p-2 text-rose-800">Not met: <strong>{result.diagnostics?.total_NC ?? 0}</strong></p>
+                    </div>
+                    {Object.entries(result.verdicts || {}).map(([itemId, verdict]) => {
+                      const explanation = result.explanations?.[itemId];
+                      const disagreement = ragAnalysis.disagreements?.some((item) => item.item_id === itemId);
+                      return (
+                        <div key={`${engineName}-${itemId}`} className={`rounded-lg border p-3 ${disagreement ? "border-amber-300 bg-amber-50/50" : "border-slate-100 bg-slate-50"}`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs font-bold text-slate-900">
+                              {reviewAnswers.find((answer) => String(answer.itemId) === itemId)?.question || `Checklist item ${itemId}`}
+                            </p>
+                            <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-slate-700">
+                              {verdict.status} · {explanation?.confidence_label || `${Math.round((verdict.confidence || explanation?.confidence || 0) * 100)}% similarity`}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-xs text-slate-700">{verdict.evidence}</p>
+                          {verdict.traversal_path && (
+                            <p className="mt-1 text-[10px] text-slate-500">Knowledge path: {verdict.traversal_path.join(" → ")}</p>
+                          )}
+                          {explanation?.needs_human_review && (
+                            <p className="mt-2 text-[11px] font-semibold text-amber-800">Human verification required: low-confidence result.</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {result.fraud_report && (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs">
+                        <p className="font-bold text-amber-900">Anomaly screening: {result.fraud_report.risk_level} risk ({result.fraud_report.composite_score}/100)</p>
+                        {result.fraud_report.all_flags?.length > 0 && (
+                          <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-900">
+                            {result.fraud_report.all_flags.map((flag, index) => <li key={index}>{flag}</li>)}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </section>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={askRagQuestion} className="flex flex-col sm:flex-row gap-2">
+              <input
+                value={ragQuestion}
+                onChange={(event) => setRagQuestion(event.target.value)}
+                disabled={!canDecide || ragAskLoading}
+                placeholder="Ask about recorded audit evidence..."
+                className="min-w-0 flex-1 rounded-xl border border-cyan-200 bg-white px-3 py-2 text-xs text-slate-900"
+              />
+              <button
+                type="submit"
+                disabled={!canDecide || ragAskLoading || !ragQuestion.trim()}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-700 px-4 py-2 text-xs font-bold text-cyan-800 hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Send size={14} />
+                {ragAskLoading ? "Searching..." : "Ask VERA"}
+              </button>
+            </form>
+            {ragAnswer && <p className="whitespace-pre-wrap rounded-xl bg-white p-3 text-xs text-slate-700">{ragAnswer}</p>}
+            {!canDecide && <p className="text-[11px] text-slate-500">VERA actions are available for audits submitted for reviewer sign-off.</p>}
+          </section>
+
           {/* Review Sheet Form */}
           <div className="space-y-6">
             <div>
@@ -317,6 +496,7 @@ const ReviewerDashboard = () => {
                               <select
                                 value={item.score}
                                 onChange={(e) => handleScoreOverride(idx, e.target.value)}
+                                disabled={!canDecide}
                                 className="bg-white border border-purple-300 rounded p-1 text-[11px] font-bold text-purple-900 w-[50px] text-center focus:outline-none"
                               >
                                 {Array.from({ length: (item.maxScore || 10) + 1 }).map((_, i) => (
@@ -331,6 +511,7 @@ const ReviewerDashboard = () => {
                             <select
                               value={item.severity}
                               onChange={(e) => handleOverrideField(idx, "severity", e.target.value)}
+                              disabled={!canDecide}
                               className={`w-full p-2 border rounded-xl text-[10px] font-bold text-center appearance-none cursor-pointer focus:outline-none ${
                                 item.severity === 'Critical' ? 'bg-rose-100 border-rose-300 text-rose-800' :
                                 item.severity === 'Major' ? 'bg-amber-100 border-amber-300 text-amber-800' :
@@ -351,6 +532,7 @@ const ReviewerDashboard = () => {
                               value={item.comment || ""}
                               placeholder="Auditor observation / QA remarks..."
                               onChange={(e) => handleOverrideField(idx, "comment", e.target.value)}
+                              disabled={!canDecide}
                               className="w-full p-2 border border-slate-200 rounded-xl text-[11px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-purple-500 bg-slate-50"
                             />
                           </td>
@@ -371,6 +553,7 @@ const ReviewerDashboard = () => {
                 rows={2}
                 value={reviewerComments}
                 onChange={(e) => setReviewerComments(e.target.value)}
+                disabled={!canDecide}
                 placeholder="Enter regulatory feedback note, verification comments, or reason for return..."
                 className="w-full p-4 border border-slate-200 rounded-2xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
@@ -385,22 +568,35 @@ const ReviewerDashboard = () => {
                 Exit Review Workspace
               </button>
 
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => submitReviewAction("SEND_BACK")}
-                  disabled={actionLoading}
-                  className="py-2.5 px-5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 flex items-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  <RotateCcw size={14} /> Send Back to Auditor
-                </button>
-                <button
-                  onClick={() => submitReviewAction("APPROVE")}
-                  disabled={actionLoading}
-                  className="py-2.5 px-6 rounded-xl text-xs font-black text-white bg-purple-600 hover:bg-purple-700 flex items-center gap-2 cursor-pointer shadow-md transition-colors"
-                >
-                  <CheckCircle size={16} /> Approve &amp; Release Report
-                </button>
-              </div>
+              {canDecide ? (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => submitReviewAction("SEND_BACK")}
+                    disabled={actionLoading}
+                    className="py-2.5 px-5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <RotateCcw size={14} /> Send Back to Auditor
+                  </button>
+                  <button
+                    onClick={() => submitReviewAction("REJECT")}
+                    disabled={actionLoading}
+                    className="py-2.5 px-5 rounded-xl text-xs font-bold text-rose-700 bg-white border border-rose-200 hover:bg-rose-50 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <FileX size={14} /> Reject
+                  </button>
+                  <button
+                    onClick={() => submitReviewAction("APPROVE")}
+                    disabled={actionLoading}
+                    className="py-2.5 px-6 rounded-xl text-xs font-black text-white bg-purple-600 hover:bg-purple-700 flex items-center gap-2 cursor-pointer shadow-md transition-colors"
+                  >
+                    <CheckCircle size={16} /> Approve &amp; Release Report
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs font-medium text-slate-500">
+                  This audit is read-only. Decisions are available after the auditor submits it for review.
+                </p>
+              )}
             </div>
 
           </div>
@@ -512,7 +708,7 @@ const ReviewerDashboard = () => {
                     <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center border-t md:border-t-0 p-3 pt-3 md:p-0 border-slate-200 gap-2">
                       <div className="text-right text-xs">
                         <span className="text-[10px] text-slate-400 block font-semibold">Current Score</span>
-                        <span className="font-black text-slate-900 text-base">{rev.score !== null ? `${rev.score}%` : "—"}</span>
+                        <span className="font-black text-slate-900 text-base">{rev.score != null ? `${rev.score}%` : "—"}</span>
                       </div>
 
                       <button
