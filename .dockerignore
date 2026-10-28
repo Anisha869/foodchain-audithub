@@ -1,0 +1,8 @@
+.git
+**/node_modules
+**/.env
+**/.env.*
+client/dist
+**/__pycache__
+*.pyc
+test_checklist.xlsx

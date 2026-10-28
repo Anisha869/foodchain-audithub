@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="veraGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e3c72" />
+      <stop offset="100%" stop-color="#2a5298" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#veraGrad)" />
+  <path d="M256 96 L384 150 V260 C384 340 330 400 256 430 C182 400 128 340 128 260 V150 Z" fill="#ffffff" fill-opacity="0.1" stroke="#ffffff" stroke-width="16" stroke-linejoin="round" />
+  <path d="M256 128 L352 170 V255 C352 315 312 365 256 390 C200 365 160 315 160 255 V170 Z" fill="#ffffff" fill-opacity="0.2" />
+  <path d="M210 260 L245 295 L315 215" fill="none" stroke="#10b981" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
