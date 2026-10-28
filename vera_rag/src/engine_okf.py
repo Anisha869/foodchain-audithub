@@ -176,6 +176,49 @@ def _read_okf_node(cat_slug: str, item_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+@lru_cache(maxsize=16)
+def _get_category_tfidf(cat_slug: str):
+    json_file = f"{cat_slug}.json"
+    items = _load_json_items(json_file)
+    if not items:
+        items = _load_json_items("general_manufacturing.json")
+    if not items:
+        return None, None, []
+    questions = [str(it.get("question") or "") for it in items]
+    try:
+        vec = TfidfVectorizer(stop_words="english", ngram_range=(1, 2))
+        mat = vec.fit_transform(questions)
+        return vec, mat, items
+    except Exception:
+        return None, None, items
+
+
+def _find_best_standard_item(cat_slug: str, question: str) -> Optional[Dict[str, Any]]:
+    vec, mat, items = _get_category_tfidf(cat_slug)
+    if not items or not question.strip():
+        return None
+    if vec is not None and mat is not None:
+        try:
+            q_vec = vec.transform([question])
+            sims = sk_cosine(q_vec, mat)[0]
+            best_idx = int(sims.argmax())
+            if sims[best_idx] >= 0.10:
+                return items[best_idx]
+        except Exception:
+            pass
+    # Token overlap fallback
+    q_tokens = set(re.findall(r"\w+", question.lower())) - {"is", "are", "the", "for", "and", "in", "of", "to", "all", "with", "a"}
+    best_item = None
+    best_count = 0
+    for it in items:
+        it_tokens = set(re.findall(r"\w+", str(it.get("question", "")).lower()))
+        common = len(q_tokens & it_tokens)
+        if common > best_count:
+            best_count = common
+            best_item = it
+    return best_item if best_count >= 1 else items[0] if items else None
+
+
 def run_okf_engine(
     checklist: List[Dict[str, Any]],
     report_text: str,
@@ -242,9 +285,35 @@ def run_okf_engine(
         is_asterisk = bool(item.get("asterisk_critical") or item.get("is_asterisk"))
 
         cat_slug = _resolve_category(raw_cat, item_id)
+        query_text = raw_question
+        traversal_path = ["index.md", cat_slug, f"item_{item_id}"]
+        node_evidence_header = f"OKF General: [{cat_slug}]"
 
-        # 1. Traverse OKF bundle graph
+        # 1. Look for direct OKF bundle node
         okf_node = _read_okf_node(cat_slug, item_id)
+
+        # If not found directly by ID (e.g. numeric ID "1" or custom ID), resolve to standard FSSAI item
+        if not okf_node:
+            best_std = _find_best_standard_item(cat_slug, raw_question)
+            if best_std:
+                std_id = str(best_std.get("item_id", ""))
+                # Try loading OKF bundle markdown node for the matched standard item
+                okf_node = _read_okf_node(cat_slug, std_id)
+                if not okf_node:
+                    # Also try general_manufacturing bundle
+                    okf_node = _read_okf_node("general_manufacturing", std_id)
+
+                if not okf_node:
+                    # Use JSON checklist entry
+                    traversal_path = ["checklists_index.json", f"{cat_slug}.json", std_id]
+                    hops = 2
+                    total_hops += hops
+                    landings += 1
+                    query_text = f"{raw_question} {best_std.get('question', '')}".strip()
+                    if best_std.get("asterisk_critical"):
+                        is_asterisk = True
+                    node_evidence_header = f"OKF JSON: [{' → '.join(traversal_path)}]"
+
         if okf_node:
             traversal_path = okf_node["traversal_path"]
             hops = 2
@@ -254,47 +323,13 @@ def run_okf_engine(
             if okf_node.get("asterisk_critical"):
                 is_asterisk = True
             node_evidence_header = f"OKF Node: [{' → '.join(traversal_path)}]"
-        else:
-            # Fall back to JSON checklist
-            json_file = f"{cat_slug}.json"
-            json_items = _load_json_items(json_file)
-            matched_json = next(
-                (entry for entry in json_items if str(entry.get("item_id", "")).lower() == item_id.lower()),
-                None
-            )
-            if not matched_json and raw_question and json_items:
-                matched_json = max(
-                    json_items,
-                    key=lambda entry: SequenceMatcher(
-                        None,
-                        _normalize(raw_question),
-                        _normalize(str(entry.get("question", ""))),
-                    ).ratio(),
-                    default=None,
-                )
-                if matched_json and SequenceMatcher(
-                    None,
-                    _normalize(raw_question),
-                    _normalize(str(matched_json.get("question", ""))),
-                ).ratio() < 0.30:
-                    matched_json = None
-
-            if matched_json:
-                traversal_path = ["checklists_index.json", json_file, str(matched_json.get("item_id", item_id))]
-                hops = 2
-                total_hops += hops
-                landings += 1
-                query_text = f"{raw_question} {matched_json.get('question', '')}".strip()
-                if matched_json.get("asterisk_critical"):
-                    is_asterisk = True
-                node_evidence_header = f"OKF JSON: [{' → '.join(traversal_path)}]"
-            else:
-                traversal_path = ["index.md", cat_slug, "unmapped_custom_item"]
-                hops = 1
-                total_hops += hops
-                unmapped += 1
-                query_text = raw_question
-                node_evidence_header = f"OKF Unmapped: [{item_id}]"
+        elif not query_text:
+            traversal_path = ["index.md", cat_slug, f"item_{item_id}"]
+            hops = 1
+            total_hops += hops
+            unmapped += 1
+            query_text = raw_question
+            node_evidence_header = f"OKF General: [{cat_slug}]"
 
         # 2. Retrieve report evidence
         if has_tfidf and query_text:

@@ -46,21 +46,39 @@ const getAuditReportContext = async (auditId, req, res) => {
   }
 
   const reportText = [
-    audit.notes || "",
-    ...answers.map((answer) => {
-    const details = [
-      answer.comment ? `Auditor comment: ${answer.comment}` : "",
-      answer.evidence ? `Evidence: ${answer.evidence}` : "",
-    ];
-    return details.filter(Boolean).join(". ");
+    audit.notes ? `Audit Scope & Facility Notes: ${audit.notes}` : "",
+    ...answers.map((answer, idx) => {
+      const maxScore = Number(answer.maxScore) || 10;
+      const score = Number(answer.score);
+      const isPass = score === maxScore;
+      const isFail = score === 0;
+
+      let scoreVerdict = "";
+      if (isPass) {
+        scoreVerdict = "Compliant. Verified requirement fully satisfied and maintained on-site.";
+      } else if (isFail) {
+        scoreVerdict = "Non-compliant deficiency noted. Violation observed, requirement not maintained or missing.";
+      } else if (!isNaN(score)) {
+        scoreVerdict = `Partially compliant. Procedural gaps noted with partial implementation (Score: ${score}/${maxScore}).`;
+      } else {
+        scoreVerdict = "Audit verification in progress.";
+      }
+
+      const details = [
+        `[Item ${idx + 1} - ${answer.category || "General"}] Requirement: ${answer.question}.`,
+        `Evaluation: ${scoreVerdict}`,
+        answer.comment ? `Auditor observation: ${answer.comment}.` : "",
+        answer.evidence ? `Supporting Evidence: ${answer.evidence}.` : "",
+      ];
+      return details.filter(Boolean).join(" ");
     }),
   ].filter(Boolean).join("\n");
 
-  const questionContext = answers.map((answer) => {
+  const questionContext = answers.map((answer, idx) => {
     const details = [
-      answer.question ? `Checklist item: ${answer.question}` : "",
-      `Recorded score: ${answer.score ?? "not scored"}/${answer.maxScore ?? 10}`,
-      answer.comment ? `Auditor comment: ${answer.comment}` : "",
+      `[${idx + 1}] ${answer.category || "General"}: ${answer.question}`,
+      `Score: ${answer.score ?? "unscored"}/${answer.maxScore ?? 10}`,
+      answer.comment ? `Auditor notes: ${answer.comment}` : "",
       answer.evidence ? `Evidence: ${answer.evidence}` : "",
     ];
     return details.filter(Boolean).join(". ");
